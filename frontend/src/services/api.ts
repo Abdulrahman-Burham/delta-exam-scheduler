@@ -9,6 +9,7 @@ import {
   ScheduleAnalytics,
   AvailabilityConstraint,
   VenueSchedule,
+  SubstituteCandidate,
 } from '../types';
 
 const API_BASE = '/api';
@@ -303,6 +304,16 @@ export const api = {
       });
       if (!res.ok) throw new Error('Failed to remove invigilation assignment');
       return true;
+    },
+    getEligibleSubstitutes: async (
+      sessionId: number,
+      role: string = 'INVIGILATOR_TA',
+      sameDayOnly: boolean = true
+    ) => {
+      const res = await secureFetch(
+        `${API_BASE}/schedules/eligible-substitutes?session_id=${sessionId}&role=${role}&same_day_only=${sameDayOnly}`
+      );
+      return handleResponse<SubstituteCandidate[]>(res);
     },
   },
 

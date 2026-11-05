@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Venue, VenueSchedule, VenueSessionSlot, User, AssignedStaff } from '../types';
+import { Venue, VenueSchedule, VenueSessionSlot, User, AssignedStaff, SubstituteCandidate } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
@@ -45,6 +45,38 @@ export const VenueScheduleModal: React.FC<VenueScheduleModalProps> = ({ venue, o
   const [addingToSessionId, setAddingToSessionId] = useState<number | null>(null);
   const [selectedTaId, setSelectedTaId] = useState<string>('');
   const [isMutating, setIsMutating] = useState<boolean>(false);
+  const [eligibleTAs, setEligibleTAs] = useState<SubstituteCandidate[]>([]);
+  const [loadingEligible, setLoadingEligible] = useState<boolean>(false);
+  const [sameDayOnly, setSameDayOnly] = useState<boolean>(true);
+
+  // When addingToSessionId changes, load verified same-day conflict-free substitutes
+  useEffect(() => {
+    if (!addingToSessionId) {
+      setEligibleTAs([]);
+      return;
+    }
+    const loadEligible = async () => {
+      setLoadingEligible(true);
+      try {
+        const data = await api.schedules.getEligibleSubstitutes(
+          addingToSessionId,
+          'INVIGILATOR_TA',
+          sameDayOnly
+        );
+        setEligibleTAs(data);
+        if (data.length > 0) {
+          setSelectedTaId(String(data[0].user_id));
+        } else {
+          setSelectedTaId('');
+        }
+      } catch {
+        // non-blocking
+      } finally {
+        setLoadingEligible(false);
+      }
+    };
+    loadEligible();
+  }, [addingToSessionId, sameDayOnly]);
 
   const fetchSchedule = async () => {
     try {
@@ -465,61 +497,99 @@ export const VenueScheduleModal: React.FC<VenueScheduleModalProps> = ({ venue, o
           </div>
 
           {/* Inline Add TA Box when active */}
-          {addingToSessionId && (
-            <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 space-y-3 animate-fade-in shadow-xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
-                  <UserPlus className="w-4 h-4 text-cyan-400" />
-                  <span>
-                    {language === 'ar'
-                      ? 'إضافة وتسكين معيد مراقب لهذه الفترة الامتحانية:'
-                      : 'Assign a Teaching Assistant to this session:'}
-                  </span>
+          {addingToSessionId && (() => {
+            const targetSession = sessions.find((s) => s.session_id === addingToSessionId);
+            return (
+              <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 space-y-3 animate-fade-in shadow-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
+                    <UserPlus className="w-4 h-4 text-cyan-400" />
+                    <span>
+                      {language === 'ar'
+                        ? 'إضافة وتسكين معيد مراقب لهذه الفترة الامتحانية:'
+                        : 'Assign a Teaching Assistant to this session:'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setAddingToSessionId(null);
+                      setSelectedTaId('');
+                    }}
+                    className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setAddingToSessionId(null);
-                    setSelectedTaId('');
-                  }}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <select
-                  value={selectedTaId}
-                  onChange={(e) => setSelectedTaId(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-400 outline-none"
-                >
-                  <option value="">
-                    {language === 'ar' ? '-- اختر المعيد من القائمة --' : '-- Select TA from roster --'}
-                  </option>
-                  {allTAs.map((ta) => (
-                    <option key={ta.id} value={String(ta.id)}>
-                      {ta.full_name} ({ta.staff_id || ta.phone})
+                {targetSession && (
+                  <div className="flex flex-wrap items-center justify-between text-[11px] bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white">
+                        {targetSession.course_code} — {targetSession.course_name}
+                      </span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-cyan-400 font-mono">
+                        {targetSession.date} ({targetSession.start_time.slice(0, 5)} - {targetSession.end_time.slice(0, 5)})
+                      </span>
+                    </div>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white transition">
+                      <input
+                        type="checkbox"
+                        checked={sameDayOnly}
+                        onChange={(e) => setSameDayOnly(e.target.checked)}
+                        className="accent-cyan-500 rounded"
+                      />
+                      <span className="font-bold text-[10px]">
+                        {language === 'ar' ? 'المتواجدين في نفس اليوم فقط' : 'Same-day present only'}
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedTaId}
+                    onChange={(e) => setSelectedTaId(e.target.value)}
+                    disabled={loadingEligible || isMutating}
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-400 outline-none"
+                  >
+                    <option value="">
+                      {loadingEligible
+                        ? (language === 'ar' ? 'جاري فحص المعيدين المتاحين اليوم وبدون تعارض...' : 'Verifying conflict-free TAs...')
+                        : eligibleTAs.length === 0
+                        ? (language === 'ar' ? '-- لا يوجد معيد متاح اليوم (أوقف خيار "المتواجدين في نفس اليوم") --' : '-- No TAs free today --')
+                        : (language === 'ar' ? '-- اختر المعيد المتاح --' : '-- Select free TA --')}
                     </option>
-                  ))}
-                </select>
+                    {eligibleTAs.map((ta) => (
+                      <option key={ta.user_id} value={String(ta.user_id)}>
+                        {ta.full_name}
+                        {ta.is_present_today
+                          ? ` [متواجد اليوم: ${ta.today_schedule_summary.join(' | ') || `${ta.today_sessions_count} فترات`}]`
+                          : ' [غير متواجد اليوم]'}
+                        {ta.phone ? ` (${ta.phone})` : ''}
+                      </option>
+                    ))}
+                  </select>
 
-                <button
-                  onClick={() => handleAddTA(addingToSessionId)}
-                  disabled={!selectedTaId || isMutating}
-                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {isMutating ? (
-                    <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>{language === 'ar' ? 'تأكيد التسكين' : 'Confirm Assignment'}</span>
-                    </>
-                  )}
-                </button>
+                  <button
+                    onClick={() => handleAddTA(addingToSessionId)}
+                    disabled={!selectedTaId || isMutating || loadingEligible}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    {isMutating ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'تأكيد التسكين' : 'Confirm Assignment'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Quick Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

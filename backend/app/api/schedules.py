@@ -22,6 +22,7 @@ from app.schemas.schedule import (
     VenueScheduleOut,
     VenueSessionSlot,
     AssignedStaffOut,
+    SubstituteCandidateOut,
 )
 from app.schemas.user import UserOut
 from app.services.optimizer import InvigilationOptimizer
@@ -428,6 +429,141 @@ def remove_schedule_assignment(
     db.delete(assignment)
     db.commit()
     return None
+
+
+@router.get("/eligible-substitutes", response_model=List[SubstituteCandidateOut])
+def get_eligible_substitutes(
+    session_id: int,
+    role: Optional[str] = "INVIGILATOR_TA",
+    same_day_only: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns eligible faculty/TA substitutes for an exam session.
+    Enforces business logic:
+    - Candidate must be present on campus on the same day (to avoid commuting on day off) if same_day_only=True
+    - Candidate must be completely free during the session's time slot (no overlapping exam or blackout constraint)
+    - Candidate must not already be assigned to this session
+    """
+    session = db.query(ExamSession).options(joinedload(ExamSession.venue)).filter(ExamSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Exam session not found")
+
+    target_date = session.date
+    start_t = session.start_time
+    end_t = session.end_time
+
+    active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
+    if not active_run:
+        return []
+
+    # Get all active users
+    all_users = db.query(User).filter(User.is_active == True).all()
+    if role in ("LEAD_PROFESSOR", "DOCTOR", "PROFESSOR"):
+        candidates = [u for u in all_users if u.role in (RoleEnum.DOCTOR, RoleEnum.PROFESSOR, RoleEnum.ADMIN)]
+    else:
+        candidates = [u for u in all_users if u.role == RoleEnum.TA]
+
+    # Fetch all assignments in current run for this date with session and venue loaded
+    day_assignments = (
+        db.query(ScheduleAssignment)
+        .join(ExamSession)
+        .filter(
+            ScheduleAssignment.schedule_run_id == active_run.id,
+            ExamSession.date == target_date
+        )
+        .options(joinedload(ScheduleAssignment.exam_session).joinedload(ExamSession.venue))
+        .all()
+    )
+
+    # Fetch total assignments per user in this run
+    all_run_assignments = (
+        db.query(ScheduleAssignment)
+        .filter(ScheduleAssignment.schedule_run_id == active_run.id)
+        .all()
+    )
+    user_total_shifts: Dict[str, int] = {}
+    for a in all_run_assignments:
+        user_total_shifts[a.user_id] = user_total_shifts.get(a.user_id, 0) + 1
+
+    # Fetch unavailable blackout constraints on this date
+    constraints = (
+        db.query(AvailabilityConstraint)
+        .filter(
+            AvailabilityConstraint.date == target_date,
+            AvailabilityConstraint.constraint_type == "UNAVAILABLE"
+        )
+        .all()
+    )
+    user_constraints_map: Dict[str, List[AvailabilityConstraint]] = {}
+    for c in constraints:
+        user_constraints_map.setdefault(c.user_id, []).append(c)
+
+    results: List[SubstituteCandidateOut] = []
+
+    for user in candidates:
+        # Check all assignments candidate has today
+        user_today_assigns = [a for a in day_assignments if a.user_id == user.id]
+        is_present_today = len(user_today_assigns) > 0
+
+        # Check if already assigned to this exact session
+        if any(a.exam_session_id == session.id for a in user_today_assigns):
+            continue
+
+        # Check if user has an overlapping exam session today
+        has_overlap = False
+        for a in user_today_assigns:
+            s_other = a.exam_session
+            if max(start_t, s_other.start_time) < min(end_t, s_other.end_time):
+                has_overlap = True
+                break
+
+        if has_overlap:
+            continue
+
+        # Check blackout constraints
+        is_blocked_by_constraint = False
+        for c in user_constraints_map.get(user.id, []):
+            if c.start_time is None or max(start_t, c.start_time) < min(end_t, c.end_time):
+                is_blocked_by_constraint = True
+                break
+
+        if is_blocked_by_constraint:
+            continue
+
+        # If same_day_only requested, only include those who already have exams on campus today
+        if same_day_only and not is_present_today:
+            continue
+
+        # Format today's other shifts summary for display
+        today_summary = []
+        for a in sorted(user_today_assigns, key=lambda x: x.exam_session.start_time):
+            s_other = a.exam_session
+            v_name = s_other.venue.name if s_other.venue else "TBD"
+            today_summary.append(f"{s_other.start_time.strftime('%H:%M')}-{s_other.end_time.strftime('%H:%M')} ({s_other.course_code} @ {v_name})")
+
+        role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
+
+        results.append(
+            SubstituteCandidateOut(
+                user_id=str(user.id),
+                staff_id=user.staff_id,
+                full_name=user.full_name,
+                email=user.email,
+                phone=user.phone,
+                department=user.department,
+                role=role_str,
+                is_present_today=is_present_today,
+                today_sessions_count=len(user_today_assigns),
+                today_schedule_summary=today_summary,
+                total_shifts_count=user_total_shifts.get(user.id, 0),
+            )
+        )
+
+    # Sort: present today first (descending), then by fewest total shifts (fairness)
+    results.sort(key=lambda x: (-int(x.is_present_today), x.total_shifts_count))
+    return results
 
 
 @router.get("/user/{user_id}", response_model=List[ScheduleAssignmentDetail])

@@ -174,3 +174,17 @@ export interface VenueSchedule {
   total_sessions: number;
   sessions: VenueSessionSlot[];
 }
+
+export interface SubstituteCandidate {
+  user_id: string;
+  staff_id?: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+  department?: string;
+  role: string;
+  is_present_today: boolean;
+  today_sessions_count: number;
+  today_schedule_summary: string[];
+  total_shifts_count: number;
+}

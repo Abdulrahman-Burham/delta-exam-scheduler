@@ -152,3 +152,17 @@ class VenueScheduleOut(BaseModel):
     venue_type: str
     total_sessions: int
     sessions: List[VenueSessionSlot]
+
+
+class SubstituteCandidateOut(BaseModel):
+    user_id: str
+    staff_id: Optional[str] = None
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    role: str
+    is_present_today: bool
+    today_sessions_count: int
+    today_schedule_summary: List[str] = []
+    total_shifts_count: int
