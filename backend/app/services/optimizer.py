@@ -42,8 +42,16 @@ class InvigilationOptimizer:
         self.existing_locked = existing_locked or []
         self.config = config or ScheduleRunConfig()
 
-        self.professors = [u for u in users if u.role == RoleEnum.PROFESSOR and getattr(u, "is_active", True) in (True, None)]
-        self.tas = [u for u in users if u.role == RoleEnum.TA and getattr(u, "is_active", True) in (True, None)]
+        self.professors = [
+            u for u in users
+            if (u.role == RoleEnum.PROFESSOR or u.role == RoleEnum.DOCTOR or str(getattr(u, "role", "")).upper() in ("DOCTOR", "PROFESSOR"))
+            and getattr(u, "is_active", True) in (True, None)
+        ]
+        self.tas = [
+            u for u in users
+            if (u.role == RoleEnum.TA or str(getattr(u, "role", "")).upper() == "TA")
+            and getattr(u, "is_active", True) in (True, None)
+        ]
 
     @staticmethod
     def _is_time_overlap(s1_date: date, s1_start: TimeType, s1_end: TimeType,

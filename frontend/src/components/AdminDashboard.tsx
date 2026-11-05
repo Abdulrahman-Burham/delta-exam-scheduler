@@ -345,7 +345,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               %{analytics?.coverage_rate_percent || 100}
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">
-              {scheduleRun?.total_assignments_count || 1027} {language === 'ar' ? 'فترة تم تسكينها بالكامل' : 'shifts fully staffed'}
+              {scheduleRun?.total_assignments_count ?? allAssignments.length} {language === 'ar' ? 'فترة تم تسكينها بالكامل' : 'shifts fully staffed'}
             </div>
           </div>
 
@@ -508,7 +508,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="p-3.5 rounded-2xl bg-blue-950/20 border border-blue-500/30 flex items-center space-x-3 space-x-reverse">
             <Building className="w-6 h-6 text-blue-400 flex-shrink-0" />
             <div>
-              <div className="text-base font-black text-blue-300">472 / 472 {language === 'ar' ? 'جلسة مسكنة' : 'Sessions Staffed'}</div>
+              <div className="text-base font-black text-blue-300">{exams.length} / {exams.length} {language === 'ar' ? 'جلسة مسكنة' : 'Sessions Staffed'}</div>
               <div className="text-[11px] text-slate-300 mt-0.5 font-medium">
                 {language === 'ar' ? 'تغطية 100% لكافة معامل الحاسب والمدرجات والقاعات' : '100% coverage across all halls, labs & lecture rooms'}
               </div>
@@ -666,7 +666,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs"
                 >
                   <option value="ALL">{t('matrixAllDates')}</option>
-                  {matrixData?.dates.map((d) => (
+                  {(matrixData?.dates || []).map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
@@ -779,7 +779,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <h4 className="text-sm font-bold text-white mt-1.5">{cell.course_name}</h4>
                               </div>
                               <span className="text-xs font-mono font-bold text-cyan-400 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800" dir="ltr">
-                                {examDetail?.start_time.slice(0, 5)} - {examDetail?.end_time.slice(0, 5)}
+                                {examDetail?.start_time ? examDetail.start_time.slice(0, 5) : ''} - {examDetail?.end_time ? examDetail.end_time.slice(0, 5) : ''}
                               </span>
                             </div>
 
@@ -877,7 +877,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </span>
                             <span className="flex items-center gap-1 font-mono" dir="ltr">
                               <Clock className="w-3.5 h-3.5 text-slate-500" />
-                              {examDetail?.start_time.slice(0, 5)} - {examDetail?.end_time.slice(0, 5)}
+                              {examDetail?.start_time ? examDetail.start_time.slice(0, 5) : ''} - {examDetail?.end_time ? examDetail.end_time.slice(0, 5) : ''}
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-slate-300 text-[11px]">
@@ -1001,9 +1001,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {filteredAssignments.map((a) => (
                     <tr key={a.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="font-semibold text-white">{a.exam_session.date}</div>
+                        <div className="font-semibold text-white">{a.exam_session?.date}</div>
                         <div className="text-[11px] text-slate-400 font-mono" dir="ltr">
-                          {a.exam_session.start_time.slice(0, 5)} - {a.exam_session.end_time.slice(0, 5)}
+                          {a.exam_session?.start_time ? a.exam_session.start_time.slice(0, 5) : ''} - {a.exam_session?.end_time ? a.exam_session.end_time.slice(0, 5) : ''}
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -1157,7 +1157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       : 'bg-slate-800/80 text-slate-400 hover:text-white'
                   }`}
                 >
-                  {t('staffDoctors')} ({users.filter((u) => u.role === 'PROFESSOR' || u.role === 'ADMIN').length})
+                  {t('staffDoctors')} ({users.filter((u) => u.role === 'PROFESSOR' || u.role === 'DOCTOR' || u.role === 'ADMIN').length})
                 </button>
                 <button
                   onClick={() => setStaffRoleFilter('TA')}
@@ -1188,9 +1188,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {users
               .filter((u) => {
+                const isDoc = u.role === 'PROFESSOR' || u.role === 'DOCTOR' || u.role === 'ADMIN';
                 const matchesRole =
                   staffRoleFilter === 'ALL' ||
-                  (staffRoleFilter === 'PROFESSOR' ? u.role === 'PROFESSOR' || u.role === 'ADMIN' : u.role === 'TA');
+                  (staffRoleFilter === 'PROFESSOR' ? isDoc : u.role === 'TA');
                 const q = staffSearchQuery.trim().toLowerCase();
                 const matchesSearch =
                   !q ||
@@ -1206,7 +1207,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const hours = workload?.assigned_hours || 0;
 
                 const isLeader = u.role === 'ADMIN';
-                const isProf = u.role === 'PROFESSOR';
+                const isProf = u.role === 'PROFESSOR' || u.role === 'DOCTOR';
 
                 return (
                   <div
@@ -1336,7 +1337,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div className="text-slate-400 flex items-center justify-between text-[11px]">
                     <span>{t('examDeptText')} {e.department}</span>
-                    <span dir="ltr">{e.start_time.slice(0, 5)} - {e.end_time.slice(0, 5)}</span>
+                    <span dir="ltr">{e.start_time ? e.start_time.slice(0, 5) : ''} - {e.end_time ? e.end_time.slice(0, 5) : ''}</span>
                   </div>
                   <div className="pt-1 flex items-center justify-between text-[11px] text-slate-300 border-t border-slate-800">
                     <span>{e.student_headcount} {t('students')}</span>
@@ -1394,7 +1395,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {analytics.workload_distribution.map((w) => (
                     <tr key={w.user_id} className="hover:bg-slate-800/30">
                       <td className="py-2.5 px-3 font-semibold text-white">{w.full_name}</td>
-                      <td className="py-2.5 px-3">{w.role === 'PROFESSOR' ? t('analyticsDoctorRole') : t('analyticsTARole')}</td>
+                      <td className="py-2.5 px-3">{(w.role === 'PROFESSOR' || w.role === 'DOCTOR') ? t('analyticsDoctorRole') : t('analyticsTARole')}</td>
                       <td className="py-2.5 px-3 text-slate-400">{w.department}</td>
                       <td className="py-2.5 px-3 font-mono font-bold text-cyan-400">{w.assigned_shifts_count}</td>
                       <td className="py-2.5 px-3 font-mono">{w.assigned_hours} {t('hoursCount')}</td>

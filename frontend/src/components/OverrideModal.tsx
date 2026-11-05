@@ -24,9 +24,14 @@ export const OverrideModal: React.FC<OverrideModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter candidates by same role
-  const targetRole = assignment.role_in_exam === 'LEAD_PROFESSOR' ? 'PROFESSOR' : 'TA';
-  const eligibleCandidates = availableUsers.filter((u) => u.role === targetRole);
+  // Filter candidates by same role (doctors/professors for lead, TAs for proctor)
+  const isLead = assignment.role_in_exam === 'LEAD_PROFESSOR';
+  const eligibleCandidates = availableUsers.filter((u) => {
+    if (isLead) {
+      return u.role === 'PROFESSOR' || u.role === 'DOCTOR' || u.role === 'ADMIN';
+    }
+    return u.role === 'TA';
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

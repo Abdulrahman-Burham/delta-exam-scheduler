@@ -27,7 +27,7 @@ def get_analytics_summary(
     if active_run:
         assignments = db.query(ScheduleAssignment).filter(ScheduleAssignment.schedule_run_id == active_run.id).all()
 
-    profs = [u for u in users if u.role == RoleEnum.PROFESSOR]
+    profs = [u for u in users if u.role in (RoleEnum.DOCTOR, RoleEnum.PROFESSOR)]
     tas = [u for u in users if u.role == RoleEnum.TA]
 
     # Calculate workload per user
@@ -55,7 +55,7 @@ def get_analytics_summary(
     workload_distribution = []
     for u in users:
         shifts = user_shift_counts.get(u.id, 0)
-        target = avg_ta if u.role == RoleEnum.TA else (avg_prof if u.role == RoleEnum.PROFESSOR else 0.0)
+        target = avg_ta if u.role == RoleEnum.TA else (avg_prof if u.role in (RoleEnum.DOCTOR, RoleEnum.PROFESSOR) else 0.0)
         workload_distribution.append(UserWorkloadStat(
             user_id=u.id,
             full_name=u.full_name,

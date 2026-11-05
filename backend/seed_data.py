@@ -80,26 +80,26 @@ def seed_database(force: bool = True):
         created_users = []
 
         # A. Leadership & Admin
-        # 1. Dr. Tarek Hassan (Head of Committee / Vice Dean)
-        admin_tarek = User(
+        # 1. Assoc. Prof. Dr. Hanaa Salem (Dean of Faculty / Supreme Examination Committee Chair)
+        admin_hanaa = User(
             staff_id="DU-ADM-01",
             email="admin@faculty.edu",
             hashed_password=admin_hash,
-            full_name="Assoc. Prof. Dr. Tarek Hassan (أ.م.د/ طارق حسن)",
+            full_name="Assoc. Prof. Dr. Hanaa Salem (أ.م.د/ هناء سالم)",
             role=RoleEnum.ADMIN,
             department="Artificial Intelligence",
-            title="Dean of Examination Committee / Vice Dean (وكيل الكلية ورئيس لجنة الامتحانات)",
+            title="Dean of Faculty (عميد كلية الذكاء الاصطناعي ورئيس لجنة الامتحانات)",
             phone="+20 100 000 0001",
             max_days_per_week=5,
             max_daily_shifts=2,
             max_total_shifts=10,
             is_active=True,
         )
-        db.add(admin_tarek)
-        created_users.append((admin_tarek, "AdminPass123!", "Admin (Chair)"))
+        db.add(admin_hanaa)
+        created_users.append((admin_hanaa, "AdminPass123!", "Admin (Dean)"))
 
-        # Secondary alias for Dr. Tarek's official university email
-        admin_alias = User(
+        # 2. Assoc. Prof. Dr. Tarek Hassan (Vice Dean for Student Affairs / Examination Committee Chair)
+        admin_tarek = User(
             staff_id="DU-ADM-02",
             email="tarek.hassan@deltauniv.edu.eg",
             hashed_password=admin_hash,
@@ -113,8 +113,8 @@ def seed_database(force: bool = True):
             max_total_shifts=10,
             is_active=True,
         )
-        db.add(admin_alias)
-        created_users.append((admin_alias, "AdminPass123!", "Admin (Vice Dean)"))
+        db.add(admin_tarek)
+        created_users.append((admin_tarek, "AdminPass123!", "Admin (Vice Dean)"))
 
         # B. 7 Specialized Faculty Professors across distinct departments
         prof_data = [

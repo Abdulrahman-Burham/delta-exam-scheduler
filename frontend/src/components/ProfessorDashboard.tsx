@@ -115,7 +115,8 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
     }
   };
 
-  const formatTime = (timeStr: string) => {
+  const formatTime = (timeStr?: string) => {
+    if (!timeStr) return '';
     try {
       const [hh, mm] = timeStr.slice(0, 5).split(':').map(Number);
       if (language === 'ar') {
@@ -128,16 +129,20 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
         return `${hour12}:${mm < 10 ? '0' + mm : mm} ${period}`;
       }
     } catch {
-      return timeStr.slice(0, 5);
+      return timeStr?.slice(0, 5) || '';
     }
   };
 
   // Chronological sorting (Date asc, Start time asc)
   const sortedDuties = useMemo(() => {
     return [...duties].sort((a, b) => {
-      const cmpDate = a.exam_session.date.localeCompare(b.exam_session.date);
+      const dateA = a.exam_session?.date || '';
+      const dateB = b.exam_session?.date || '';
+      const cmpDate = dateA.localeCompare(dateB);
       if (cmpDate !== 0) return cmpDate;
-      return a.exam_session.start_time.localeCompare(b.exam_session.start_time);
+      const startA = a.exam_session?.start_time || '';
+      const startB = b.exam_session?.start_time || '';
+      return startA.localeCompare(startB);
     });
   }, [duties]);
 

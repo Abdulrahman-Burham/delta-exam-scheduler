@@ -117,7 +117,8 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
     }
   };
 
-  const formatTime = (timeStr: string) => {
+  const formatTime = (timeStr?: string) => {
+    if (!timeStr) return '';
     try {
       const [hh, mm] = timeStr.slice(0, 5).split(':').map(Number);
       if (language === 'ar') {
@@ -130,11 +131,12 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
         return `${hour12}:${mm < 10 ? '0' + mm : mm} ${period}`;
       }
     } catch {
-      return timeStr.slice(0, 5);
+      return timeStr?.slice(0, 5) || '';
     }
   };
 
-  const getMinutesBetween = (time1: string, time2: string) => {
+  const getMinutesBetween = (time1?: string, time2?: string) => {
+    if (!time1 || !time2) return 0;
     try {
       const [h1, m1] = time1.slice(0, 5).split(':').map(Number);
       const [h2, m2] = time2.slice(0, 5).split(':').map(Number);
@@ -147,9 +149,13 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
   // 1. Strict Chronological Sorting (Date asc, Start Time asc)
   const sortedDuties = useMemo(() => {
     return [...duties].sort((a, b) => {
-      const cmpDate = a.exam_session.date.localeCompare(b.exam_session.date);
+      const dateA = a.exam_session?.date || '';
+      const dateB = b.exam_session?.date || '';
+      const cmpDate = dateA.localeCompare(dateB);
       if (cmpDate !== 0) return cmpDate;
-      return a.exam_session.start_time.localeCompare(b.exam_session.start_time);
+      const startA = a.exam_session?.start_time || '';
+      const startB = b.exam_session?.start_time || '';
+      return startA.localeCompare(startB);
     });
   }, [duties]);
 

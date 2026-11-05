@@ -70,7 +70,7 @@ export const ConstraintModal: React.FC<ConstraintModalProps> = ({ users, onClose
             >
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.full_name} ({u.role === 'PROFESSOR' ? t('roleProfBadge') : t('roleTABadge')})
+                  {u.full_name} ({u.role === 'ADMIN' ? t('roleAdminBadge') : (u.role === 'PROFESSOR' || u.role === 'DOCTOR') ? t('roleProfBadge') : t('roleTABadge')})
                 </option>
               ))}
             </select>
