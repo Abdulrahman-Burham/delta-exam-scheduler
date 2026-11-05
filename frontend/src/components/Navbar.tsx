@@ -8,7 +8,8 @@ import {
   Sparkles,
   ChevronDown,
   RefreshCw,
-  Languages
+  Languages,
+  LogOut,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -17,6 +18,7 @@ interface NavbarProps {
   onSwitchUser: (email: string) => Promise<void>;
   onRefresh: () => void;
   isGenerating: boolean;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchUser,
   onRefresh,
   isGenerating,
+  onLogout,
 }) => {
   const { language, toggleLanguage, t, isRtl } = useLanguage();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -155,6 +158,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                       );
                     })}
                   </div>
+                  {onLogout && (
+                    <div className="pt-1 mt-1 border-t border-slate-800">
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          onLogout();
+                        }}
+                        className={`w-full px-3.5 py-2 flex items-center space-x-2 space-x-reverse ${isRtl ? 'text-right' : 'text-left'} text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition text-xs font-semibold`}
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'تسجيل الخروج' : 'Sign Out'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}

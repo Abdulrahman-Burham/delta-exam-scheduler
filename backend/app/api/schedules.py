@@ -1,3 +1,4 @@
+import threading
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
@@ -23,6 +24,8 @@ from app.services.optimizer import InvigilationOptimizer
 
 router = APIRouter(prefix="/schedules", tags=["AI Scheduling Engine & Allocations"])
 
+SOLVER_LOCK = threading.Lock()
+
 
 @router.post("/generate", response_model=ScheduleRunDetail)
 def generate_schedule(
@@ -30,73 +33,85 @@ def generate_schedule(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([RoleEnum.ADMIN]))
 ):
-    users = db.query(User).filter(User.is_active == True).all()
-    venues = db.query(Venue).filter(Venue.is_active == True).all()
-    sessions = db.query(ExamSession).all()
-    constraints = db.query(AvailabilityConstraint).all()
-
-    if not sessions:
-        raise HTTPException(status_code=400, detail="No exam sessions found. Please define sessions first.")
-    if not users:
-        raise HTTPException(status_code=400, detail="No active faculty or TA staff members found.")
-
-    # Fetch currently active locked assignments if preserving
-    existing_locked = []
-    if config.honor_existing_locks:
-        active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
-        if active_run:
-            existing_locked = db.query(ScheduleAssignment).filter(
-                ScheduleAssignment.schedule_run_id == active_run.id,
-                ScheduleAssignment.is_locked == True
-            ).all()
-
-    optimizer = InvigilationOptimizer(
-        users=users,
-        venues=venues,
-        sessions=sessions,
-        constraints=constraints,
-        existing_locked=existing_locked,
-        config=config,
-    )
-    result = optimizer.solve()
-
-    # Deactivate previous active runs
-    db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).update({"is_current_active": False})
-
-    # Record new schedule run
-    new_run = ScheduleRun(
-        status=result.status,
-        algorithm_used="OR-Tools CP-SAT (Google)" if result.status in ("OPTIMAL", "FEASIBLE") else "Resilient Heuristic Hybrid",
-        solve_time_ms=result.solve_time_ms,
-        objective_value=result.objective_value,
-        workload_balance_weight=config.workload_balance_weight,
-        rest_interval_weight=config.rest_interval_weight,
-        building_proximity_weight=config.building_proximity_weight,
-        department_match_weight=config.department_match_weight,
-        total_sessions_count=len(sessions),
-        total_assignments_count=len(result.assignments),
-        is_current_active=True,
-        notes="; ".join(result.bottlenecks) if result.bottlenecks else "Optimal conflict-free schedule generated.",
-    )
-    db.add(new_run)
-    db.flush()
-
-    # Persist assignments
-    for a_data in result.assignments:
-        assignment = ScheduleAssignment(
-            schedule_run_id=new_run.id,
-            exam_session_id=a_data["exam_session_id"],
-            user_id=a_data["user_id"],
-            role_in_exam=a_data["role_in_exam"],
-            is_locked=a_data.get("is_locked", False),
-            is_manual_override=a_data.get("is_manual_override", False),
+    if not SOLVER_LOCK.acquire(blocking=False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A schedule generation optimization run is already in progress. Please wait for it to complete."
         )
-        db.add(assignment)
 
-    db.commit()
+    try:
+        users = db.query(User).filter(User.is_active == True).all()
+        venues = db.query(Venue).filter(Venue.is_active == True).all()
+        sessions = db.query(ExamSession).all()
+        constraints = db.query(AvailabilityConstraint).all()
 
-    # Reload full run with relationships
-    return get_current_schedule(db=db, current_user=current_user)
+        if not sessions:
+            raise HTTPException(status_code=400, detail="No exam sessions found. Please define sessions first.")
+        if not users:
+            raise HTTPException(status_code=400, detail="No active faculty or TA staff members found.")
+
+        # Fetch currently active locked assignments if preserving
+        existing_locked = []
+        if config.honor_existing_locks:
+            active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
+            if active_run:
+                existing_locked = db.query(ScheduleAssignment).filter(
+                    ScheduleAssignment.schedule_run_id == active_run.id,
+                    ScheduleAssignment.is_locked == True
+                ).all()
+
+        optimizer = InvigilationOptimizer(
+            users=users,
+            venues=venues,
+            sessions=sessions,
+            constraints=constraints,
+            existing_locked=existing_locked,
+            config=config,
+        )
+        result = optimizer.solve()
+
+        # Deactivate previous active runs
+        db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).update({"is_current_active": False})
+
+        # Record new schedule run
+        new_run = ScheduleRun(
+            status=result.status,
+            algorithm_used="OR-Tools CP-SAT (Google)" if result.status in ("OPTIMAL", "FEASIBLE") else "Resilient Heuristic Hybrid",
+            solve_time_ms=result.solve_time_ms,
+            objective_value=result.objective_value,
+            workload_balance_weight=config.workload_balance_weight,
+            rest_interval_weight=config.rest_interval_weight,
+            building_proximity_weight=config.building_proximity_weight,
+            department_match_weight=config.department_match_weight,
+            total_sessions_count=len(sessions),
+            total_assignments_count=len(result.assignments),
+            is_current_active=True,
+            notes="; ".join(result.bottlenecks) if result.bottlenecks else "Optimal conflict-free schedule generated.",
+        )
+        db.add(new_run)
+        db.flush()
+
+        # High-performance bulk persist assignments
+        if result.assignments:
+            assignment_records = [
+                ScheduleAssignment(
+                    schedule_run_id=new_run.id,
+                    exam_session_id=a_data["exam_session_id"],
+                    user_id=a_data["user_id"],
+                    role_in_exam=a_data["role_in_exam"],
+                    is_locked=a_data.get("is_locked", False),
+                    is_manual_override=a_data.get("is_manual_override", False),
+                )
+                for a_data in result.assignments
+            ]
+            db.bulk_save_objects(assignment_records)
+
+        db.commit()
+
+        # Reload full run with relationships
+        return get_current_schedule(db=db, current_user=current_user)
+    finally:
+        SOLVER_LOCK.release()
 
 
 @router.get("/current", response_model=ScheduleRunDetail)

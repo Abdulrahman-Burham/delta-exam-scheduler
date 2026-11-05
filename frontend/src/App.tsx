@@ -5,6 +5,7 @@ import { Navbar } from './components/Navbar';
 import { AdminDashboard } from './components/AdminDashboard';
 import { TADashboard } from './components/TADashboard';
 import { ProfessorDashboard } from './components/ProfessorDashboard';
+import { LoginView } from './components/LoginView';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { ToastProvider, useToast } from './context/ToastContext';
@@ -32,34 +33,51 @@ const MainAppContent: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Authenticate default demo persona (Dean) if not already signed in
-      const defaultEmail = 'admin@faculty.edu';
       const existingToken = localStorage.getItem('access_token');
       if (existingToken) {
         try {
           const me = await api.auth.getMe();
           setCurrentUser(me);
+          await refreshAllData();
         } catch {
-          const authRes = await api.auth.switchDemoUser(defaultEmail);
-          localStorage.setItem('access_token', authRes.access_token);
-          const me = await api.auth.getMe();
-          setCurrentUser(me);
+          localStorage.removeItem('access_token');
+          setCurrentUser(null);
         }
       } else {
-        const authRes = await api.auth.switchDemoUser(defaultEmail);
-        localStorage.setItem('access_token', authRes.access_token);
-        const me = await api.auth.getMe();
-        setCurrentUser(me);
+        try {
+          const me = await api.auth.getMe();
+          setCurrentUser(me);
+          await refreshAllData();
+        } catch {
+          setCurrentUser(null);
+        }
       }
-
-      // 2. Load all system state in parallel
-      await refreshAllData();
     } catch (err: any) {
       console.error('Initialization error:', err);
-      setError(err.message || (language === 'ar' ? 'تعذر الاتصال بسيرفر النظام. يرجى التأكد من تشغيل الـ Backend.' : 'Could not connect to backend server.'));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLoginSuccess = async (user: User) => {
+    setCurrentUser(user);
+    setLoading(true);
+    await refreshAllData();
+    setLoading(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('access_token');
+    setCurrentUser(null);
+    toast.info(
+      language === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Signed Out',
+      language === 'ar' ? 'تم إنهاء الجلسة الآمنة وإغلاق البوابة' : 'Secure session ended'
+    );
   };
 
   const refreshAllData = async () => {
@@ -144,6 +162,10 @@ const MainAppContent: React.FC = () => {
     );
   }
 
+  if (!currentUser) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <Navbar
@@ -151,6 +173,7 @@ const MainAppContent: React.FC = () => {
         onSwitchUser={handleSwitchUser}
         onRefresh={refreshAllData}
         isGenerating={isGenerating}
+        onLogout={handleLogout}
       />
 
       {error && (

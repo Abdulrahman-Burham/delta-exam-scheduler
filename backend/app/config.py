@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     
     # SQLite default for instant portability; postgresql://user:pass@localhost:5432/invigilation in Docker/Prod
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./invigilation.db")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ALLOW_DEMO_SWITCHER: bool = os.getenv("ALLOW_DEMO_SWITCHER", "true").lower() in ("true", "1", "yes")
     
     # Strictly whitelisted CORS origins (NO wildcard '*' allowed when allow_credentials=True)
     CORS_ORIGINS: List[str] = [

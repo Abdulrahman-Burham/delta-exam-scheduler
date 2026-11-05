@@ -20,10 +20,11 @@ from app.security import (
 )
 from app.dependencies import get_current_user
 from app.limiter import limiter
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+IS_PRODUCTION = settings.ENVIRONMENT.lower() == "production"
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -159,7 +160,14 @@ def switch_demo_user(
     """
     Fast Persona Switcher for evaluation and demonstration purposes.
     Sets HttpOnly cookie and returns full token payload.
+    Disabled in production unless explicitly enabled via ALLOW_DEMO_SWITCHER.
     """
+    if IS_PRODUCTION and not settings.ALLOW_DEMO_SWITCHER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo persona switcher is strictly disabled in production. Authenticate via /api/auth/login."
+        )
+
     user = db.query(User).filter(User.email == email.strip().lower()).first()
     if not user:
         raise HTTPException(

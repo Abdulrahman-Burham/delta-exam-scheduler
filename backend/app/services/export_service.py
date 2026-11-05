@@ -19,13 +19,26 @@ from app.models.venue import Venue
 
 
 # ---------------------------------------------------------------------------
-# Font Registration: Attempt to load Unicode TTF font, fallback to Helvetica
+# Font Registration & BiDi / Arabic Reshaping Engine
 # ---------------------------------------------------------------------------
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display as bidi_get_display
+    HAS_ARABIC_SUPPORT = True
+except ImportError:
+    HAS_ARABIC_SUPPORT = False
+
 SYSTEM_FONT_NAME = "Helvetica"
 SYSTEM_FONT_BOLD = "Helvetica-Bold"
 
 candidate_fonts = [
+    # Prestigious Academic Arabic Fonts (Amiri - Egyptian National Library / Arabeyes)
+    ("/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Regular.ttf", "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Bold.ttf"),
+    ("/usr/share/fonts/truetype/kacst/KacstBook.ttf", "/usr/share/fonts/truetype/kacst/KacstBook.ttf"),
+    # Windows native fonts with comprehensive Arabic codepoint coverage
     ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf"),
+    ("C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/segoeuib.ttf"),
+    # Linux DejaVu fallback
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
 ]
 
@@ -45,19 +58,30 @@ for regular_path, bold_path in candidate_fonts:
 
 
 def clean_pdf_text(text: str) -> str:
-    """Safely sanitizes text for PDF rendering, escaping XML entities and handling unprintable characters."""
+    """
+    Safely sanitizes text for PDF rendering.
+    - If Arabic characters are detected and UnicodeFont is loaded,
+      reshapes ligatures and applies BiDi algorithm for correct RTL rendering.
+    - If standard Helvetica is active, strips non-Latin characters to prevent black box glyph errors.
+    - Escapes XML entities (&, <, >) for safe ReportLab Paragraph formatting.
+    """
     if not text:
         return ""
-    # If using standard Helvetica, strip non-Latin/Arabic to prevent black box glyph errors
-    if SYSTEM_FONT_NAME == "Helvetica":
-        # Keep ASCII and common latin characters
-        sanitized = re.sub(r'[\u0600-\u06FF]', '', text).strip()
-        # Clean double spaces or empty parentheses left behind
-        sanitized = re.sub(r'\(\s*\)', '', sanitized).strip()
-        text = sanitized or text
-    
-    # Escape XML entities for ReportLab Paragraphs
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text_str = str(text).strip()
+    has_arabic = bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text_str))
+
+    if has_arabic:
+        if SYSTEM_FONT_NAME == "Helvetica":
+            sanitized = re.sub(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', '', text_str).strip()
+            text_str = re.sub(r'\(\s*\)', '', sanitized).strip() or text_str
+        elif HAS_ARABIC_SUPPORT:
+            try:
+                reshaped = arabic_reshaper.reshape(text_str)
+                text_str = bidi_get_display(reshaped)
+            except Exception:
+                pass
+
+    return text_str.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 
@@ -167,19 +191,21 @@ class ExportService:
 
         for s in sorted_sessions:
             v = venues.get(s.venue_id)
-            venue_str = f"{v.name} ({v.building}, Fl.{v.floor})" if v else "N/A"
+            raw_venue = f"{v.name} ({v.building}, Fl.{v.floor})" if v else "N/A"
+            venue_str = clean_pdf_text(raw_venue)
             profs_str = ", ".join(session_profs.get(s.id, [])) or "None Assigned"
             tas_str = ", ".join(session_tas.get(s.id, [])) or "None Assigned"
 
             date_str = s.date.strftime("%a, %b %d")
             time_str = f"{s.start_time.strftime('%H:%M')} - {s.end_time.strftime('%H:%M')}"
-            course_str = f"<b>{s.course_code}</b><br/>{s.course_name}"
+            course_str = f"<b>{s.course_code}</b><br/>{clean_pdf_text(s.course_name)}"
+            dept_str = clean_pdf_text(s.department)
 
             table_data.append([
                 Paragraph(date_str, cell_bold_style),
                 Paragraph(time_str, cell_style),
                 Paragraph(course_str, cell_style),
-                Paragraph(s.department, cell_style),
+                Paragraph(dept_str, cell_style),
                 Paragraph(venue_str, cell_style),
                 Paragraph(str(s.student_headcount), cell_style),
                 Paragraph(profs_str, cell_bold_style),
@@ -282,7 +308,7 @@ class ExportService:
             [Paragraph(f"<b>Staff Name:</b> {clean_pdf_text(user.full_name)}", body_style),
              Paragraph(f"<b>Staff ID:</b> {clean_pdf_text(user.staff_id)}", body_style)],
             [Paragraph(f"<b>Role:</b> {role_label}", body_style),
-             Paragraph(f"<b>Department:</b> {user.department}", body_style)],
+             Paragraph(f"<b>Department:</b> {clean_pdf_text(user.department)}", body_style)],
             [Paragraph(f"<b>Email:</b> {user.email}", body_style),
              Paragraph(f"<b>Total Assigned Duties:</b> {len(user_assignments)} shift(s)", body_style)]
         ]
@@ -325,14 +351,16 @@ class ExportService:
             if not sess:
                 continue
             v = venues.get(sess.venue_id)
-            venue_str = f"{v.name} ({v.building})" if v else "TBD"
+            raw_v = f"{v.name} ({v.building})" if v else "TBD"
+            venue_str = clean_pdf_text(raw_v)
             duty_role = "Lead Head Supervisor" if a.role_in_exam == AssignmentRoleEnum.LEAD_PROFESSOR else "Room Invigilator"
+            course_subject = f"<b>{sess.course_code}</b>: {clean_pdf_text(sess.course_name)}"
 
             duties_data.append([
                 Paragraph(str(idx), body_style),
                 Paragraph(sess.date.strftime("%A, %b %d, %Y"), body_style),
                 Paragraph(f"{sess.start_time.strftime('%H:%M')} - {sess.end_time.strftime('%H:%M')}", body_style),
-                Paragraph(f"<b>{sess.course_code}</b>: {sess.course_name}", body_style),
+                Paragraph(course_subject, body_style),
                 Paragraph(venue_str, body_style),
                 Paragraph(duty_role, body_style),
             ])

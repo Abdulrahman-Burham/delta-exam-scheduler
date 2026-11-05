@@ -196,3 +196,65 @@ def test_rate_limiting_slowapi_enforcement(client: TestClient):
             rate_limited = True
             break
     assert rate_limited is True
+
+
+def test_export_security_and_rbac_enforcement(client: TestClient):
+    """Verify export endpoints reject unauthenticated users and enforce admin role for master exports."""
+    db: Session = SessionLocal()
+    admin_user = db.query(User).filter(User.role == RoleEnum.ADMIN).first()
+    ta_user = db.query(User).filter(User.role == RoleEnum.TA).first()
+    db.close()
+
+    # 1. Unauthenticated request to /api/exports/pdf/master -> 401
+    client.cookies.clear()
+    unauth_master = client.get("/api/exports/pdf/master")
+    assert unauth_master.status_code == 401
+
+    # 2. Unauthenticated request to /api/exports/csv -> 401
+    unauth_csv = client.get("/api/exports/csv")
+    assert unauth_csv.status_code == 401
+
+    # 3. TA requesting master PDF -> 403 Forbidden
+    ta_token, _ = create_access_token(user_id=ta_user.id, role="TA", email=ta_user.email)
+    client.cookies.set("access_token", ta_token)
+    ta_master = client.get("/api/exports/pdf/master")
+    assert ta_master.status_code == 403
+    assert "Administrative privileges required" in ta_master.json()["detail"]
+
+    # 4. TA requesting CSV -> 403 Forbidden
+    ta_csv = client.get("/api/exports/csv")
+    assert ta_csv.status_code == 403
+
+    # 5. Admin requesting master PDF (with or without active run) -> not 401 and not 403
+    admin_token, _ = create_access_token(user_id=admin_user.id, role="ADMIN", email=admin_user.email)
+    client.cookies.set("access_token", admin_token)
+    admin_master = client.get("/api/exports/pdf/master")
+    assert admin_master.status_code in (200, 404)
+
+
+def test_solver_mutex_lock_concurrency(client: TestClient):
+    """Verify solver mutex lock prevents concurrent runs and returns 409 Conflict."""
+    from app.api.schedules import SOLVER_LOCK
+    db: Session = SessionLocal()
+    admin_user = db.query(User).filter(User.role == RoleEnum.ADMIN).first()
+    db.close()
+
+    admin_token, _ = create_access_token(user_id=admin_user.id, role="ADMIN", email=admin_user.email)
+    client.cookies.set("access_token", admin_token)
+
+    # Acquire lock externally to simulate ongoing solve
+    acquired = SOLVER_LOCK.acquire(blocking=False)
+    assert acquired is True
+    try:
+        res = client.post("/api/schedules/generate", json={
+            "workload_balance_weight": 50,
+            "rest_interval_weight": 40,
+            "building_proximity_weight": 30,
+            "department_match_weight": 60,
+            "honor_existing_locks": False,
+            "max_solver_seconds": 5
+        })
+        assert res.status_code == 409
+        assert "already in progress" in res.json()["detail"]
+    finally:
+        SOLVER_LOCK.release()

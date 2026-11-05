@@ -2,7 +2,7 @@ import csv
 import io
 import re
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Response, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Response, Query, Header, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -17,16 +17,19 @@ router = APIRouter(prefix="/exports", tags=["Reporting & Document Generation"])
 
 
 def get_export_user(
+    request: Request,
     token: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ) -> User:
-    """Flexible dependency allowing JWT authentication via Header, ?token= parameter, or fallback."""
+    """Hardened dependency allowing JWT authentication via Header, ?token= parameter, or HttpOnly cookie."""
     raw_token = None
     if authorization and authorization.startswith("Bearer "):
         raw_token = authorization.split(" ")[1]
     elif token:
         raw_token = token
+    elif request.cookies.get("access_token"):
+        raw_token = request.cookies.get("access_token")
 
     if raw_token:
         token_data = decode_access_token(raw_token)
@@ -34,14 +37,13 @@ def get_export_user(
             email = getattr(token_data, "email", None) or (token_data.get("sub") if isinstance(token_data, dict) else None)
             if email:
                 user = db.query(User).filter(User.email == email).first()
-                if user:
+                if user and user.is_active:
                     return user
 
-    # Fallback to active Dean / Admin user for browser one-click download
-    admin = db.query(User).filter(User.role == RoleEnum.ADMIN).first()
-    if admin:
-        return admin
-    raise HTTPException(status_code=401, detail="Authentication token required")
+    raise HTTPException(
+        status_code=401,
+        detail="Valid authentication token or session cookie required to download reports"
+    )
 
 
 @router.get("/pdf/master")
@@ -49,6 +51,9 @@ def export_master_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_export_user)
 ):
+    if current_user.role != RoleEnum.ADMIN:
+        raise HTTPException(status_code=403, detail="Administrative privileges required to export master schedule.")
+
     active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
     if not active_run:
         raise HTTPException(status_code=404, detail="No active schedule run to export. Generate a schedule first.")
@@ -157,6 +162,9 @@ def export_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_export_user)
 ):
+    if current_user.role != RoleEnum.ADMIN:
+        raise HTTPException(status_code=403, detail="Administrative privileges required to export CSV data.")
+
     active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
     if not active_run:
         raise HTTPException(status_code=404, detail="No active schedule run found")
