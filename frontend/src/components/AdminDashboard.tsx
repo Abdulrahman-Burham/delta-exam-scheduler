@@ -895,10 +895,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
 
                             <div className="flex items-center justify-between text-xs text-slate-300 pt-1 border-t border-slate-800/60">
-                              <span className="flex items-center gap-1.5 font-medium">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const v = venues.find((ven) => ven.id === cell.venue_id || ven.name === cell.venue_name);
+                                  if (v) setSelectedVenueForSchedule(v);
+                                }}
+                                className="flex items-center gap-1.5 font-bold hover:text-cyan-400 hover:underline transition text-start"
+                                title={language === 'ar' ? 'عرض جدول هذا المقر وإشغاله' : 'View venue schedule'}
+                              >
                                 <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-                                {cell.venue_name}
-                              </span>
+                                <span>{cell.venue_name}</span>
+                              </button>
                               <span className="text-slate-400">
                                 {cell.student_headcount} {t('students')}
                               </span>
@@ -992,9 +1000,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </span>
                           </div>
                           <div className="flex items-center justify-between text-slate-300 text-[11px]">
-                            <span className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const v = venues.find((ven) => ven.id === cell.venue_id || ven.name === cell.venue_name);
+                                if (v) setSelectedVenueForSchedule(v);
+                              }}
+                              className="flex items-center gap-1 hover:text-cyan-400 hover:underline transition font-bold"
+                              title={language === 'ar' ? 'عرض جدول هذا المقر وإشغاله' : 'View venue schedule'}
+                            >
                               <MapPin className="w-3.5 h-3.5 text-cyan-400" /> {cell.venue_name}
-                            </span>
+                            </button>
                             <span className="text-slate-400">{cell.student_headcount} {t('students')}</span>
                           </div>
                         </div>

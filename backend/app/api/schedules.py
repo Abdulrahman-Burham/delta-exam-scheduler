@@ -21,6 +21,7 @@ from app.schemas.schedule import (
     MatrixSlotItem,
     VenueScheduleOut,
     VenueSessionSlot,
+    AssignedStaffOut,
 )
 from app.schemas.user import UserOut
 from app.services.optimizer import InvigilationOptimizer
@@ -512,9 +513,13 @@ def get_venue_schedule(
             if a.is_locked:
                 is_locked = True
             if a.role_in_exam == AssignmentRoleEnum.LEAD_PROFESSOR and a.user:
-                lead_prof = UserOut.model_validate(a.user)
+                prof_dict = UserOut.model_validate(a.user).model_dump()
+                prof_dict["assignment_id"] = a.id
+                lead_prof = AssignedStaffOut(**prof_dict)
             elif a.role_in_exam == AssignmentRoleEnum.INVIGILATOR_TA and a.user:
-                tas.append(UserOut.model_validate(a.user))
+                ta_dict = UserOut.model_validate(a.user).model_dump()
+                ta_dict["assignment_id"] = a.id
+                tas.append(AssignedStaffOut(**ta_dict))
 
         slot_items.append(
             VenueSessionSlot(

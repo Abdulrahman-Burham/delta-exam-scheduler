@@ -144,6 +144,10 @@ export interface ScheduleRunConfig {
   honor_existing_locks: boolean;
 }
 
+export interface AssignedStaff extends User {
+  assignment_id?: number;
+}
+
 export interface VenueSessionSlot {
   session_id: number;
   course_code: string;
@@ -155,8 +159,8 @@ export interface VenueSessionSlot {
   student_headcount: number;
   required_professors: number;
   required_tas: number;
-  lead_professor?: User;
-  tas: User[];
+  lead_professor?: AssignedStaff;
+  tas: AssignedStaff[];
   is_locked: boolean;
 }
 

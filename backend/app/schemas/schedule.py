@@ -123,6 +123,10 @@ class ScheduleAnalyticsOut(BaseModel):
     algorithm_used: str
 
 
+class AssignedStaffOut(UserOut):
+    assignment_id: Optional[int] = None
+
+
 class VenueSessionSlot(BaseModel):
     session_id: int
     course_code: str
@@ -134,8 +138,8 @@ class VenueSessionSlot(BaseModel):
     student_headcount: int
     required_professors: int
     required_tas: int
-    lead_professor: Optional[UserOut] = None
-    tas: List[UserOut] = []
+    lead_professor: Optional[AssignedStaffOut] = None
+    tas: List[AssignedStaffOut] = []
     is_locked: bool = False
 
 
