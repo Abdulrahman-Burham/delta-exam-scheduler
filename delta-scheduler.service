@@ -1,0 +1,17 @@
+[Unit]
+Description=Delta University Faculty Exam Scheduler Backend
+After=network.target
+
+[Service]
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/delta-exam-scheduler/backend
+Environment="PATH=/home/azureuser/delta-exam-scheduler/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="DATABASE_URL=sqlite:////home/azureuser/delta-exam-scheduler/backend/invigilation.db"
+Environment="PYTHONPATH=/home/azureuser/delta-exam-scheduler/backend"
+ExecStart=/home/azureuser/delta-exam-scheduler/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8050
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
