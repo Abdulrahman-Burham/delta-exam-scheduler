@@ -15,6 +15,7 @@ from app.schemas.schedule import (
     ScheduleRunDetail,
     ScheduleAssignmentDetail,
     ManualOverrideRequest,
+    CreateAssignmentRequest,
     ToggleLockRequest,
     MatrixScheduleView,
     MatrixSlotItem,
@@ -325,6 +326,105 @@ def lock_all_current(
     ).update({"is_locked": lock})
     db.commit()
     return {"status": "SUCCESS", "is_locked": lock}
+
+
+@router.post("/assignments", response_model=ScheduleAssignmentDetail, status_code=status.HTTP_201_CREATED)
+def add_schedule_assignment(
+    req: CreateAssignmentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([RoleEnum.ADMIN]))
+):
+    """
+    Manually assign an invigilator (Doctor or TA) to an exam session with conflict checking.
+    """
+    active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
+    if not active_run:
+        active_run = ScheduleRun(
+            algorithm_used="Manual Assignment Lead",
+            is_current_active=True,
+            total_assignments_count=0
+        )
+        db.add(active_run)
+        db.commit()
+        db.refresh(active_run)
+
+    session = db.query(ExamSession).filter(ExamSession.id == req.exam_session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Exam session not found")
+
+    user = db.query(User).filter(User.id == req.user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Active user/staff member not found")
+
+    # Conflict check: ensure no overlapping assignment for this user on the same date/time
+    overlap = (
+        db.query(ScheduleAssignment)
+        .join(ExamSession)
+        .filter(
+            ScheduleAssignment.schedule_run_id == active_run.id,
+            ScheduleAssignment.user_id == user.id,
+            ExamSession.date == session.date,
+            ExamSession.start_time < session.end_time,
+            ExamSession.end_time > session.start_time
+        )
+        .first()
+    )
+    if overlap:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Staff member {user.full_name} is already assigned to another session at this time on {session.date}."
+        )
+
+    # Determine role in exam
+    role_in_exam = req.role_in_exam
+    if not role_in_exam:
+        if user.role in (RoleEnum.DOCTOR, RoleEnum.PROFESSOR, RoleEnum.ADMIN):
+            role_in_exam = AssignmentRoleEnum.LEAD_PROFESSOR
+        else:
+            role_in_exam = AssignmentRoleEnum.INVIGILATOR_TA
+
+    assignment = ScheduleAssignment(
+        schedule_run_id=active_run.id,
+        exam_session_id=session.id,
+        user_id=user.id,
+        role_in_exam=role_in_exam,
+        is_locked=req.is_locked,
+        is_manual_override=True,
+        override_notes=req.override_notes or "Manual invigilator assignment by examination committee"
+    )
+    db.add(assignment)
+    active_run.total_assignments_count = (active_run.total_assignments_count or 0) + 1
+    db.commit()
+    db.refresh(assignment)
+
+    reloaded = db.query(ScheduleAssignment).options(
+        joinedload(ScheduleAssignment.user),
+        joinedload(ScheduleAssignment.exam_session).joinedload(ExamSession.venue)
+    ).filter(ScheduleAssignment.id == assignment.id).first()
+
+    return ScheduleAssignmentDetail.model_validate(reloaded)
+
+
+@router.delete("/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_schedule_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([RoleEnum.ADMIN]))
+):
+    """
+    Remove/unassign an invigilator from an exam session.
+    """
+    assignment = db.query(ScheduleAssignment).filter(ScheduleAssignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    active_run = db.query(ScheduleRun).filter(ScheduleRun.id == assignment.schedule_run_id).first()
+    if active_run and (active_run.total_assignments_count or 0) > 0:
+        active_run.total_assignments_count -= 1
+
+    db.delete(assignment)
+    db.commit()
+    return None
 
 
 @router.get("/user/{user_id}", response_model=List[ScheduleAssignmentDetail])

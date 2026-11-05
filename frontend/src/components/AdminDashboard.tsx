@@ -13,6 +13,11 @@ import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { OverrideModal } from './OverrideModal';
 import { ConstraintModal } from './ConstraintModal';
+import { AddAssignmentModal } from './AddAssignmentModal';
+import { AddStaffModal } from './AddStaffModal';
+import { AddVenueModal } from './AddVenueModal';
+import { AddExamModal } from './AddExamModal';
+import { useToast } from '../context/ToastContext';
 import html2canvas from 'html2canvas';
 import {
   Sparkles,
@@ -25,6 +30,7 @@ import {
   Grid,
   Users,
   Building,
+  Building2,
   BarChart3,
   CheckCircle2,
   AlertTriangle,
@@ -45,6 +51,9 @@ import {
   ChevronUp,
   FileText,
   Check,
+  Trash2,
+  UserPlus,
+  CalendarPlus,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -110,7 +119,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modal states
   const [overrideAssignment, setOverrideAssignment] = useState<ScheduleAssignmentDetail | null>(null);
   const [showConstraintModal, setShowConstraintModal] = useState<boolean>(false);
+  const [showAddAssignmentModal, setShowAddAssignmentModal] = useState<boolean>(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(false);
+  const [showAddVenueModal, setShowAddVenueModal] = useState<boolean>(false);
+  const [showAddExamModal, setShowAddExamModal] = useState<boolean>(false);
+  const [preselectedSessionId, setPreselectedSessionId] = useState<number | undefined>(undefined);
   const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
+
+  const toast = useToast();
+
+  const handleDeleteAssignment = async (assignmentId: number, userName?: string, courseName?: string) => {
+    const confirmMsg = language === 'ar'
+      ? `هل أنت متأكد من إلغاء تكليف (${userName || 'المراقب'}) من امتحان (${courseName || ''})؟`
+      : `Are you sure you want to remove ${userName || 'this proctor'} from ${courseName || 'this exam'}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.schedules.deleteAssignment(assignmentId);
+      toast.success(language === 'ar' ? 'تم إلغاء التكليف بنجاح' : 'Assignment removed successfully');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove assignment');
+    }
+  };
+
+  const handleDeleteStaff = async (userId: string | number, name: string) => {
+    const confirmMsg = language === 'ar'
+      ? `هل أنت متأكد من إزالة (${name}) من هيئة الكلية؟`
+      : `Are you sure you want to delete ${name}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.users.delete(userId);
+      toast.success(language === 'ar' ? 'تمت إزالة العضو بنجاح' : 'Staff member removed');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete staff member');
+    }
+  };
+
+  const handleDeleteVenue = async (venueId: number, name: string) => {
+    const confirmMsg = language === 'ar'
+      ? `هل أنت متأكد من إزالة المقر (${name})؟`
+      : `Are you sure you want to delete venue ${name}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.venues.delete(venueId);
+      toast.success(language === 'ar' ? 'تمت إزالة المقر بنجاح' : 'Venue removed');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete venue');
+    }
+  };
+
+  const handleDeleteExam = async (examId: number, name: string) => {
+    const confirmMsg = language === 'ar'
+      ? `هل أنت متأكد من حذف الجلسة الامتحانية (${name})؟`
+      : `Are you sure you want to delete exam ${name}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.exams.delete(examId);
+      toast.success(language === 'ar' ? 'تم حذف الامتحان بنجاح' : 'Exam session removed');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete exam session');
+    }
+  };
 
   // Capture table reference for PNG export
   const captureRef = useRef<HTMLDivElement>(null);
@@ -977,8 +1053,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <option value="HALL">{language === 'ar' ? 'المدرجات والقاعات (3-4 مراقبين)' : 'Lecture Halls (3-4 TAs)'}</option>
               </select>
             </div>
-            <div className="text-xs text-slate-400 font-mono">
-              {filteredAssignments.length} {t('shiftsCount')}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setPreselectedSessionId(undefined);
+                  setShowAddAssignmentModal(true);
+                }}
+                className="flex items-center space-x-1.5 space-x-reverse px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs transition shadow-md shadow-cyan-500/20"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{language === 'ar' ? 'تسكين / إضافة مراقب' : 'Add Invigilator'}</span>
+              </button>
+              <div className="text-xs text-slate-400 font-mono">
+                {filteredAssignments.length} {t('shiftsCount')}
+              </div>
             </div>
           </div>
 
@@ -1052,12 +1140,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       </td>
                       <td className="py-3 px-4 text-start whitespace-nowrap">
-                        <button
-                          onClick={() => setOverrideAssignment(a)}
-                          className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-bold border border-slate-700 text-[11px] transition"
-                        >
-                          {t('matrixOverrideBtn')}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setOverrideAssignment(a)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-bold border border-slate-700 text-[11px] transition"
+                            title={language === 'ar' ? 'استبدال المراقب بعضو آخر' : 'Reassign proctor'}
+                          >
+                            {t('matrixOverrideBtn')}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAssignment(a.id, a.user?.full_name, a.exam_session?.course_name)}
+                            className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 transition"
+                            title={language === 'ar' ? 'إلغاء التكليف وإزالة المراقب من الفترة' : 'Remove invigilator'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1125,6 +1223,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="flex items-center space-x-1.5 space-x-reverse px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 text-xs font-extrabold transition shadow-md shadow-cyan-500/20"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>{language === 'ar' ? 'إضافة عضو جديد' : 'Add Staff Member'}</span>
+                </button>
                 <button
                   onClick={() => setShowConstraintModal(true)}
                   className="flex items-center space-x-1.5 space-x-reverse px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition shadow-sm"
@@ -1273,6 +1378,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         )}
                       </div>
+                      {!isLeader && (
+                        <button
+                          onClick={() => handleDeleteStaff(u.id, u.full_name)}
+                          className="p-1.5 rounded-xl bg-slate-950 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 transition flex-shrink-0"
+                          title={language === 'ar' ? 'إزالة العضو من الكلية' : 'Remove staff member'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs">
@@ -1299,8 +1413,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Venues */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-white">{t('venuesTitle')} ({venues.length})</h3>
-            <p className="text-xs text-slate-400">{t('venuesSubtitle')}</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">{t('venuesTitle')} ({venues.length})</h3>
+                <p className="text-xs text-slate-400">{t('venuesSubtitle')}</p>
+              </div>
+              <button
+                onClick={() => setShowAddVenueModal(true)}
+                className="flex items-center space-x-1.5 space-x-reverse px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition shadow-sm"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'إضافة مقر' : 'Add Venue'}</span>
+              </button>
+            </div>
             <div className="space-y-2">
               {venues.map((v) => (
                 <div key={v.id} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
@@ -1315,9 +1440,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div className="text-[11px] text-slate-400">{v.building} • {t('venueFloorText')} {v.floor}</div>
                   </div>
-                  <div className="text-end">
-                    <div className="font-bold text-emerald-400">{v.capacity} {t('venueCapacityText')}</div>
-                    <div className="text-[10px] text-slate-500">{t('venueCapacityLabel')}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-end">
+                      <div className="font-bold text-emerald-400">{v.capacity} {t('venueCapacityText')}</div>
+                      <div className="text-[10px] text-slate-500">{t('venueCapacityLabel')}</div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteVenue(v.id, v.name)}
+                      className="p-1.5 rounded-xl bg-slate-950 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 transition"
+                      title={language === 'ar' ? 'حذف المقر' : 'Delete venue'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1326,8 +1460,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Exam Sessions */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-white">{t('examsTitle')} ({exams.length})</h3>
-            <p className="text-xs text-slate-400">{t('examsSubtitle')}</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">{t('examsTitle')} ({exams.length})</h3>
+                <p className="text-xs text-slate-400">{t('examsSubtitle')}</p>
+              </div>
+              <button
+                onClick={() => setShowAddExamModal(true)}
+                className="flex items-center space-x-1.5 space-x-reverse px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition shadow-sm"
+              >
+                <CalendarPlus className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'إضافة امتحان' : 'Add Exam'}</span>
+              </button>
+            </div>
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {exams.map((e) => (
                 <div key={e.id} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-1.5 text-xs">
@@ -1341,9 +1486,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div className="pt-1 flex items-center justify-between text-[11px] text-slate-300 border-t border-slate-800">
                     <span>{e.student_headcount} {t('students')}</span>
-                    <span className="text-cyan-400 font-semibold">
-                      {t('examStaffQuota')} {e.required_professors} {t('examProfQuotaText')} + {e.required_tas} {t('examTAQuotaText')}
-                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-cyan-400 font-semibold">
+                        {t('examStaffQuota')} {e.required_professors} {t('examProfQuotaText')} + {e.required_tas} {t('examTAQuotaText')}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteExam(e.id, `${e.course_code}: ${e.course_name}`)}
+                        className="p-1 rounded-lg bg-slate-950 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 transition"
+                        title={language === 'ar' ? 'حذف الامتحان' : 'Delete exam'}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1507,6 +1661,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             await api.users.addConstraint(uid, constraintData);
             onRefresh();
           }}
+        />
+      )}
+
+      {/* Add Assignment Modal */}
+      {showAddAssignmentModal && (
+        <AddAssignmentModal
+          exams={exams}
+          users={users}
+          preselectedSessionId={preselectedSessionId}
+          onClose={() => {
+            setShowAddAssignmentModal(false);
+            setPreselectedSessionId(undefined);
+          }}
+          onSuccess={() => onRefresh()}
+        />
+      )}
+
+      {/* Add Staff Modal */}
+      {showAddStaffModal && (
+        <AddStaffModal
+          onClose={() => setShowAddStaffModal(false)}
+          onSuccess={() => onRefresh()}
+        />
+      )}
+
+      {/* Add Venue Modal */}
+      {showAddVenueModal && (
+        <AddVenueModal
+          onClose={() => setShowAddVenueModal(false)}
+          onSuccess={() => onRefresh()}
+        />
+      )}
+
+      {/* Add Exam Modal */}
+      {showAddExamModal && (
+        <AddExamModal
+          venues={venues}
+          onClose={() => setShowAddExamModal(false)}
+          onSuccess={() => onRefresh()}
         />
       )}
     </div>

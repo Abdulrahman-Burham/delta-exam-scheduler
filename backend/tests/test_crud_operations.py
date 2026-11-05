@@ -158,3 +158,65 @@ def test_exam_session_crud_lifecycle(client: TestClient, admin_headers: dict):
     assert list_res.status_code == 200
     exams = list_res.json()
     assert any(e["course_code"] == exam_payload["course_code"] for e in exams)
+
+    # 3. Delete Exam Session
+    session_id = exam["id"]
+    del_res = client.delete(f"/api/exams/{session_id}", headers=admin_headers)
+    assert del_res.status_code == 204
+
+
+def test_assignment_add_and_remove_lifecycle(client: TestClient, admin_headers: dict):
+    """Test manually assigning a proctor to an exam session and removing them with conflict validation."""
+    # Ensure an active schedule run exists
+    client.post(
+        "/api/schedules/generate",
+        headers=admin_headers,
+        json={
+            "workload_balance_weight": 50,
+            "rest_interval_weight": 30,
+            "building_proximity_weight": 20,
+            "department_match_weight": 40,
+            "honor_existing_locks": True,
+        },
+    )
+
+    # Fetch users and exams
+    users_res = client.get("/api/users", headers=admin_headers)
+    assert users_res.status_code == 200
+    users = [u for u in users_res.json() if u["role"] == "TA"]
+    assert len(users) > 0
+    test_user = users[0]
+
+    exams_res = client.get("/api/exams", headers=admin_headers)
+    assert exams_res.status_code == 200
+    exams = exams_res.json()
+    assert len(exams) > 0
+    test_exam = exams[0]
+
+    # 1. Add assignment
+    assign_payload = {
+        "exam_session_id": test_exam["id"],
+        "user_id": test_user["id"],
+        "role_in_exam": "INVIGILATOR_TA",
+        "is_locked": True,
+        "override_notes": "Automated test assignment",
+    }
+    add_res = client.post("/api/schedules/assignments", json=assign_payload, headers=admin_headers)
+    # Could be 201 or 400 if user already has an overlap on that session
+    if add_res.status_code == 400:
+        # Expected conflict if already assigned
+        assert "already assigned" in add_res.json()["detail"]
+    else:
+        assert add_res.status_code == 201
+        created_assignment = add_res.json()
+        assert created_assignment["user_id"] == test_user["id"]
+        assignment_id = created_assignment["id"]
+
+        # Conflict check: Attempting to assign again to the exact same session or overlapping session must fail
+        dup_res = client.post("/api/schedules/assignments", json=assign_payload, headers=admin_headers)
+        assert dup_res.status_code == 400
+
+        # 2. Remove assignment
+        del_res = client.delete(f"/api/schedules/assignments/{assignment_id}", headers=admin_headers)
+        assert del_res.status_code == 204
+

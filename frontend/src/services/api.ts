@@ -117,9 +117,17 @@ export const api = {
     create: async (data: any) => {
       const res = await secureFetch(`${API_BASE}/users`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       return handleResponse<User>(res);
+    },
+    delete: async (id: string | number) => {
+      const res = await secureFetch(`${API_BASE}/users/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete staff member');
+      return true;
     },
     update: async (id: string | number, data: any) => {
       const res = await secureFetch(`${API_BASE}/users/${id}`, {
@@ -153,9 +161,17 @@ export const api = {
     create: async (data: any) => {
       const res = await secureFetch(`${API_BASE}/venues`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       return handleResponse<Venue>(res);
+    },
+    delete: async (id: number) => {
+      const res = await secureFetch(`${API_BASE}/venues/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete venue');
+      return true;
     },
   },
 
@@ -168,9 +184,17 @@ export const api = {
     create: async (data: any) => {
       const res = await secureFetch(`${API_BASE}/exams`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       return handleResponse<ExamSession>(res);
+    },
+    delete: async (id: number) => {
+      const res = await secureFetch(`${API_BASE}/exams/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete exam session');
+      return true;
     },
   },
 
@@ -214,6 +238,27 @@ export const api = {
     getUserSchedule: async (userId: string | number) => {
       const res = await secureFetch(`${API_BASE}/schedules/user/${userId}`);
       return handleResponse<ScheduleAssignmentDetail[]>(res);
+    },
+    createAssignment: async (data: {
+      exam_session_id: number;
+      user_id: string | number;
+      role_in_exam?: string;
+      is_locked?: boolean;
+      override_notes?: string;
+    }) => {
+      const res = await secureFetch(`${API_BASE}/schedules/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      return handleResponse<ScheduleAssignmentDetail>(res);
+    },
+    deleteAssignment: async (assignmentId: number) => {
+      const res = await secureFetch(`${API_BASE}/schedules/assignments/${assignmentId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to remove invigilation assignment');
+      return true;
     },
   },
 

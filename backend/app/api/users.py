@@ -47,6 +47,7 @@ def create_user(
         title=user_in.title,
         phone=user_in.phone,
         is_master_student=user_in.is_master_student,
+        max_days_per_week=getattr(user_in, 'max_days_per_week', 3) or 3,
         max_daily_shifts=user_in.max_daily_shifts,
         max_total_shifts=user_in.max_total_shifts,
         is_active=user_in.is_active,

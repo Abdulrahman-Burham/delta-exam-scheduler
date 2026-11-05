@@ -61,6 +61,14 @@ class ManualOverrideRequest(BaseModel):
     notes: Optional[str] = "Manual reassignment by exam committee lead"
 
 
+class CreateAssignmentRequest(BaseModel):
+    exam_session_id: int
+    user_id: str
+    role_in_exam: Optional[AssignmentRoleEnum] = None
+    is_locked: bool = True
+    override_notes: Optional[str] = "Manual assignment by examination committee"
+
+
 class ToggleLockRequest(BaseModel):
     assignment_id: int
     is_locked: bool
