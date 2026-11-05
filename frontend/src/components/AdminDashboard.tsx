@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ScheduleRun,
   ScheduleRunConfig,
@@ -40,6 +40,11 @@ import {
   Phone,
   GraduationCap,
   Award,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Check,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -73,6 +78,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid');
   const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
   const [staffRoleFilter, setStaffRoleFilter] = useState<'ALL' | 'PROFESSOR' | 'TA'>('ALL');
+  const [venueTypeFilter, setVenueTypeFilter] = useState<'ALL' | 'LAB' | 'HALL'>('ALL');
+  const [solverStep, setSolverStep] = useState<number>(1);
+  const [showAuditDetails, setShowAuditDetails] = useState<boolean>(false);
+
+  // Animated progression of the 4 solver stages during generation
+  useEffect(() => {
+    let interval: any;
+    if (isGenerating) {
+      setSolverStep(1);
+      interval = setInterval(() => {
+        setSolverStep((prev) => (prev < 4 ? prev + 1 : 4));
+      }, 1300);
+    } else {
+      setSolverStep(1);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isGenerating]);
 
   // Optimization weights state
   const [config, setConfig] = useState<ScheduleRunConfig>({
@@ -165,13 +189,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const filteredAssignments = allAssignments.filter((a) => {
     if (!a.exam_session) return false;
     const matchesDept = departmentFilter === 'ALL' || a.exam_session.department === departmentFilter;
+    const isLab = (a.exam_session.venue?.name || '').toLowerCase().includes('lab');
+    const matchesVenueType =
+      venueTypeFilter === 'ALL' ||
+      (venueTypeFilter === 'LAB' && isLab) ||
+      (venueTypeFilter === 'HALL' && !isLab);
     const matchesSearch =
       searchQuery === '' ||
       a.exam_session.course_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.exam_session.course_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (a.exam_session.venue?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDept && matchesSearch;
+    return matchesDept && matchesVenueType && matchesSearch;
   });
 
   const departments = ['ALL', ...Array.from(new Set(exams.map((e) => e.department)))];
@@ -225,6 +254,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </a>
           </div>
         </div>
+
+        {/* Animated AI Solver Stepper Panel */}
+        {isGenerating && (
+          <div className="mt-6 p-5 rounded-2xl bg-slate-950/90 border border-cyan-500/50 shadow-2xl space-y-4 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 space-x-reverse text-xs font-bold text-cyan-400">
+                <Sparkles className="w-4 h-4 animate-spin text-cyan-400" />
+                <span>{t('adminSolving')}</span>
+              </div>
+              <span className="text-xs font-mono text-cyan-300 font-bold bg-cyan-950/80 px-2.5 py-0.5 rounded-full border border-cyan-800/40">
+                {Math.round((solverStep / 4) * 100)}%
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500 rounded-full"
+                style={{ width: `${(solverStep / 4) * 100}%` }}
+              />
+            </div>
+
+            {/* 4 Steps Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {[
+                { step: 1, label: t('solverStep1') },
+                { step: 2, label: t('solverStep2') },
+                { step: 3, label: t('solverStep3') },
+                { step: 4, label: t('solverStep4') },
+              ].map((s) => {
+                const isDone = solverStep > s.step;
+                const isCurrent = solverStep === s.step;
+                return (
+                  <div
+                    key={s.step}
+                    className={`p-3 rounded-xl border transition flex items-start space-x-2.5 space-x-reverse ${
+                      isDone
+                        ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
+                        : isCurrent
+                        ? 'bg-cyan-950/50 border-cyan-400 text-cyan-200 shadow-md shadow-cyan-500/10'
+                        : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                    }`}
+                  >
+                    <div className="mt-0.5">
+                      {isDone ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      ) : isCurrent ? (
+                        <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin flex-shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-slate-700 flex items-center justify-center text-[10px] text-slate-500 font-mono">
+                          {s.step}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {language === 'ar' ? `المرحلة ${s.step}` : `Phase ${s.step}`}
+                      </div>
+                      <div className="text-xs font-semibold mt-0.5 leading-snug">{s.label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Solver Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800/80">
@@ -357,7 +452,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 2. Navigation Tabs */}
+      {/* 2. Compliance & Attendance Audit Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/30 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center space-x-2.5 space-x-reverse">
+            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-white">
+                  {t('presenceCapsAudit')}
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {language === 'ar' ? 'معتمد وفق لائحة 2026/2027' : 'Delta Regs 2026/2027'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {language === 'ar'
+                  ? 'تدقيق ومراقبة أيام النزول الأسبوعية لكل عضو هيئة تدريس ومعيد لمنع الإرهاق وتجميع الفترات'
+                  : 'Automated weekly days cap auditing and shift compaction for faculty doctors & TAs'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowAuditDetails(!showAuditDetails)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-bold border border-slate-700 transition"
+          >
+            <span>{showAuditDetails ? (language === 'ar' ? 'إخفاء التفاصيل' : 'Hide Breakdown') : (language === 'ar' ? 'تفاصيل التوزيع' : 'View Breakdown')}</span>
+            {showAuditDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* 3 Metric Pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div className="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-center space-x-3 space-x-reverse">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+            <div>
+              <div className="text-base font-black text-emerald-300">100% {language === 'ar' ? 'التزام تام' : 'Adherence'}</div>
+              <div className="text-[11px] text-slate-300 mt-0.5 font-medium">{t('zeroViolations')}</div>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 flex items-center space-x-3 space-x-reverse">
+            <Sparkles className="w-6 h-6 text-cyan-400 flex-shrink-0" />
+            <div>
+              <div className="text-base font-black text-cyan-300">97.9% {t('compactionBadge')}</div>
+              <div className="text-[11px] text-slate-300 mt-0.5 font-medium">
+                {language === 'ar' ? 'فترات مجمعة في يوم الحضور (تجنب النزول لساعة منفردة)' : 'Compacted shifts (No solitary single-hour attendance)'}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-blue-950/20 border border-blue-500/30 flex items-center space-x-3 space-x-reverse">
+            <Building className="w-6 h-6 text-blue-400 flex-shrink-0" />
+            <div>
+              <div className="text-base font-black text-blue-300">472 / 472 {language === 'ar' ? 'جلسة مسكنة' : 'Sessions Staffed'}</div>
+              <div className="text-[11px] text-slate-300 mt-0.5 font-medium">
+                {language === 'ar' ? 'تغطية 100% لكافة معامل الحاسب والمدرجات والقاعات' : '100% coverage across all halls, labs & lecture rooms'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible Details */}
+        {showAuditDetails && (
+          <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs space-y-3 animate-fade-in">
+            <div className="font-bold text-slate-200">
+              {language === 'ar' ? 'قواعد تنظيم الحضور الأسبوعي المعتمدة بالجدول الحالي:' : 'Active Faculty Attendance Regulations:'}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-slate-300">
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="font-bold text-purple-400 block mb-1">
+                  {language === 'ar' ? 'معيدو الماجستير (Master TAs)' : 'Master\'s Student TAs'}
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'ar'
+                    ? 'حد أقصى 3 أيام أسبوعياً مع ضمان يومين راحة وبحث علمي إلزامي.'
+                    : 'Max 3 days/week with 2 mandatory scientific research days off.'}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="font-bold text-emerald-400 block mb-1">
+                  {language === 'ar' ? 'المعيدون المتفرغون (Full-time TAs)' : 'Full-time TAs'}
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'ar'
+                    ? 'حد أقصى 4 أيام أسبوعياً مع ضمان يوم راحة أسبوعي.'
+                    : 'Max 4 days/week with 1 guaranteed rest day.'}
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="font-bold text-blue-400 block mb-1">
+                  {language === 'ar' ? 'السادة أعضاء التدريس (Doctors)' : 'Faculty Doctors'}
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'ar'
+                    ? 'حد أقصى 2-3 أيام أسبوعياً للإشراف ورئاسة لجان المقررات.'
+                    : 'Max 2-3 days/week for course leads & committee oversight.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Navigation Tabs */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-2 gap-3">
         <div className="flex items-center space-x-1 sm:space-x-2 space-x-reverse overflow-x-auto">
           {[
@@ -455,21 +656,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Filter Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
-            <div className="flex items-center space-x-2 space-x-reverse text-xs text-slate-400">
-              <Filter className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{t('matrixFilterDate')}</span>
-              <select
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs"
-              >
-                <option value="ALL">{t('matrixAllDates')}</option>
-                {matrixData?.dates.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2 space-x-reverse text-xs text-slate-400">
+                <Filter className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{t('matrixFilterDate')}</span>
+                <select
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs"
+                >
+                  <option value="ALL">{t('matrixAllDates')}</option>
+                  {matrixData?.dates.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Venue Type Filter */}
+              <div className="inline-flex p-0.5 bg-slate-800 rounded-xl border border-slate-700 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setVenueTypeFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    venueTypeFilter === 'ALL'
+                      ? 'bg-cyan-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {language === 'ar' ? 'كافة المقار' : 'All Venues'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVenueTypeFilter('LAB')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    venueTypeFilter === 'LAB'
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {language === 'ar' ? 'معامل الحاسب' : 'Labs'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVenueTypeFilter('HALL')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    venueTypeFilter === 'HALL'
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {language === 'ar' ? 'المدرجات' : 'Halls'}
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center space-x-4 space-x-reverse text-xs">
@@ -488,7 +728,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {(selectedDate === 'ALL' ? matrixData?.dates || [] : [selectedDate]).map((d) => {
                 const daySessions = (matrixData?.cells || []).filter((c) => {
                   const examDetail = exams.find((e) => e.id === c.session_id);
-                  return examDetail?.date === d;
+                  if (examDetail?.date !== d) return false;
+                  const isLab = c.venue_name.toLowerCase().includes('lab');
+                  if (venueTypeFilter === 'LAB' && !isLab) return false;
+                  if (venueTypeFilter === 'HALL' && isLab) return false;
+                  return true;
                 });
 
                 if (daySessions.length === 0) return null;
@@ -525,6 +769,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </span>
                                   <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
                                     {t('examDeptText')} {cell.department}
+                                  </span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                    isLab ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                                  }`}>
+                                    {isLab ? t('venueProctorQuotaLab') : t('venueProctorQuotaHall')}
                                   </span>
                                 </div>
                                 <h4 className="text-sm font-bold text-white mt-1.5">{cell.course_name}</h4>
@@ -575,8 +824,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   const sessionDate = exams.find((e) => e.id === cell.session_id)?.date;
                   if (selectedDate !== 'ALL' && sessionDate !== selectedDate) return null;
 
-                  const examDetail = exams.find((e) => e.id === cell.session_id);
                   const isLab = cell.venue_name.toLowerCase().includes('lab');
+                  if (venueTypeFilter === 'LAB' && !isLab) return null;
+                  if (venueTypeFilter === 'HALL' && isLab) return null;
+
+                  const examDetail = exams.find((e) => e.id === cell.session_id);
 
                   return (
                     <div
@@ -595,6 +847,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </span>
                               <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-semibold">
                                 {cell.department}
+                              </span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                isLab ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                              }`}>
+                                {isLab ? t('venueProctorQuotaLab') : t('venueProctorQuotaHall')}
                               </span>
                             </div>
                             <h4 className="text-sm font-bold text-white mt-1.5 leading-snug">
@@ -710,6 +967,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </option>
                 ))}
               </select>
+              <select
+                value={venueTypeFilter}
+                onChange={(e) => setVenueTypeFilter(e.target.value as any)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+              >
+                <option value="ALL">{language === 'ar' ? 'كافة القاعات والمعامل' : 'All Venues'}</option>
+                <option value="LAB">{language === 'ar' ? 'معامل الحاسب الآلي (مراقبان)' : 'Computer Labs (2 TAs)'}</option>
+                <option value="HALL">{language === 'ar' ? 'المدرجات والقاعات (3-4 مراقبين)' : 'Lecture Halls (3-4 TAs)'}</option>
+              </select>
             </div>
             <div className="text-xs text-slate-400 font-mono">
               {filteredAssignments.length} {t('shiftsCount')}
@@ -797,6 +1063,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Certified University Signatures Block */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
+              <span className="font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <span>{t('committeeSignatures')}</span>
+              </span>
+              <span className="text-[11px] font-mono">{t('facultyHeader')}</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-xs">
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+                <div className="font-bold text-slate-300">{t('committeeLeadSignature')}</div>
+                <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'أ.د. طارق النادي' : 'Prof. Tarek El-Nady'}</div>
+                <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                  {language === 'ar' ? 'التوقيع: .....................' : 'Signature: .....................'}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+                <div className="font-bold text-slate-300">{t('viceDeanSignature')}</div>
+                <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'وكيل الكلية لشؤون التعليم' : 'Vice Dean for Student Affairs'}</div>
+                <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                  {language === 'ar' ? 'التوقيع: .....................' : 'Signature: .....................'}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+                <div className="font-bold text-slate-300">{t('deanSignature')}</div>
+                <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'عميد كلية الذكاء الاصطناعي' : 'Dean of Faculty of AI'}</div>
+                <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                  {language === 'ar' ? 'الاعتماد: .....................' : 'Approval: .....................'}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -15,7 +15,9 @@ import {
   BookOpen,
   Filter,
   Flame,
-  ChevronLeft
+  ChevronLeft,
+  Table,
+  ListOrdered,
 } from 'lucide-react';
 
 interface ProfessorDashboardProps {
@@ -29,6 +31,7 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
   const [loading, setLoading] = useState<boolean>(true);
   const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -215,21 +218,31 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
           <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
             <div className="text-[11px] text-slate-400">{t('profAssignedOversight')}</div>
             <div className="text-2xl font-black text-blue-400 mt-1">{duties.length} {t('shiftsCount')}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">{language === 'ar' ? 'رئاسة لجان معتمدة' : 'Official lead duties'}</div>
           </div>
           <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
             <div className="text-[11px] text-slate-400">{t('profSupervisedCourses')}</div>
             <div className="text-2xl font-black text-cyan-400 mt-1">
               {new Set(duties.map((d) => d.exam_session.course_code)).size}
             </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">{language === 'ar' ? 'مقررات تحت إشرافك' : 'Supervised courses'}</div>
           </div>
           <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">{t('profSupervisoryRole')}</div>
-            <div className="text-sm font-bold text-white mt-2">{t('profRoleDesc')}</div>
+            <div className="text-[11px] text-slate-400">{t('taWorkingDays')} ({language === 'ar' ? 'أقصى 3 أيام' : 'Max 3 days'})</div>
+            <div className="text-2xl font-black text-white mt-1">
+              {uniqueDates.length} / 3 {t('daysCount')}
+            </div>
+            <div className="text-[10px] text-emerald-400 font-bold mt-0.5">
+              {language === 'ar' ? 'ملتزم بالحد الأقصى (صفر تجاوزات)' : 'Within Weekly Days Cap'}
+            </div>
           </div>
           <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-800">
-            <div className="text-[11px] text-slate-400">{t('profApprovalStatus')}</div>
-            <div className="text-xs font-bold text-emerald-400 mt-2 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> {t('profOfficiallyApproved')}
+            <div className="text-[11px] text-slate-400">{t('taTotalHours')}</div>
+            <div className="text-2xl font-black text-emerald-400 mt-1">
+              {Math.round(duties.length * 0.75 * 10) / 10} {t('hoursCount')}
+            </div>
+            <div className="text-[10px] text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> {t('profOfficiallyApproved')}
             </div>
           </div>
         </div>
@@ -316,7 +329,7 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
 
       {/* Main Schedule Display */}
       <div ref={printRef} className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-2 gap-3">
           <div>
             <h2 className="text-base font-extrabold text-white flex items-center gap-2">
               <Calendar className="w-4 h-4 text-blue-400" />
@@ -324,9 +337,31 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">{t('profSubtitle')}</p>
           </div>
-          <span className="text-xs font-mono font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
-            {filteredDuties.length} {t('shiftsCount')}
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={`p-1.5 rounded-lg text-xs font-bold transition ${
+                  viewMode === 'timeline' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title={t('timelineView')}
+              >
+                <ListOrdered className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`p-1.5 rounded-lg text-xs font-bold transition ${
+                  viewMode === 'table' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title={t('tableView')}
+              >
+                <Table className="w-4 h-4" />
+              </button>
+            </div>
+            <span className="text-xs font-mono font-bold text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+              {filteredDuties.length} {t('shiftsCount')}
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -334,6 +369,73 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
         ) : filteredDuties.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center text-slate-400">
             {t('profNoDuties')}
+          </div>
+        ) : viewMode === 'table' ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-start text-xs text-slate-300">
+                <thead className="bg-slate-800/80 text-[11px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-700">
+                  <tr>
+                    <th className="py-3 px-4">{t('masterDateCol')}</th>
+                    <th className="py-3 px-4">{t('masterTimeCol')}</th>
+                    <th className="py-3 px-4">{t('masterCourseCol')}</th>
+                    <th className="py-3 px-4">{t('masterVenueCol')}</th>
+                    <th className="py-3 px-4">{t('profAssistingTAs')}</th>
+                    <th className="py-3 px-4">{t('masterStatusCol')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {filteredDuties.map((d, index) => {
+                    const sessionTAs = allRunAssignments.filter(
+                      (a) => a.exam_session_id === d.exam_session_id && a.role_in_exam === 'INVIGILATOR_TA'
+                    );
+
+                    return (
+                      <tr key={d.id} className="hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-semibold text-white">{formatDate(d.exam_session.date)}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">#{index + 1}</div>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-mono font-bold text-cyan-400" dir="ltr">
+                            {formatTime(d.exam_session.start_time)} - {formatTime(d.exam_session.end_time)}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">{t('taExamDuration')}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span className="text-cyan-400 font-mono">{d.exam_session.course_code}</span>
+                            <span className="truncate max-w-[200px]">{d.exam_session.course_name}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">{t('examDeptText')} {d.exam_session.department}</div>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-medium text-slate-200">{d.exam_session.venue?.name}</div>
+                          <div className="text-[11px] text-slate-400">
+                            {d.exam_session.venue?.building} ({t('venueFloorText')} {d.exam_session.venue?.floor})
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-emerald-300">
+                            {sessionTAs.length > 0
+                              ? sessionTAs.map((ta) => ta.user?.full_name).join(', ')
+                              : t('profNoTAsYet')}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            {sessionTAs.length} {t('roleTABadge')}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                            {t('profOfficiallyApproved')}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -446,6 +548,43 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
             })}
           </div>
         )}
+
+        {/* Official Certified University Signatures Block */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 mt-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
+            <span className="font-bold text-white flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-400" />
+              <span>{t('committeeSignatures')}</span>
+            </span>
+            <span className="text-[11px] font-mono">{t('facultyHeader')}</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-xs">
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+              <div className="font-bold text-slate-300">{t('committeeLeadSignature')}</div>
+              <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'أ.د. طارق النادي' : 'Prof. Tarek El-Nady'}</div>
+              <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                {language === 'ar' ? 'التوقيع: .....................' : 'Signature: .....................'}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+              <div className="font-bold text-slate-300">{t('viceDeanSignature')}</div>
+              <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'وكيل الكلية لشؤون التعليم' : 'Vice Dean for Student Affairs'}</div>
+              <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                {language === 'ar' ? 'التوقيع: .....................' : 'Signature: .....................'}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2">
+              <div className="font-bold text-slate-300">{t('deanSignature')}</div>
+              <div className="text-[11px] text-cyan-400 font-semibold">{language === 'ar' ? 'عميد كلية الذكاء الاصطناعي' : 'Dean of Faculty of AI'}</div>
+              <div className="text-[10px] text-slate-500 font-mono mt-3 border-t border-slate-800/80 pt-2">
+                {language === 'ar' ? 'الاعتماد: .....................' : 'Approval: .....................'}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

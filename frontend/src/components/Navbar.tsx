@@ -41,7 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const getRoleBadge = (role?: string) => {
     switch (role) {
       case 'ADMIN': return t('roleAdmin');
-      case 'PROFESSOR': return t('roleProf');
+      case 'PROFESSOR':
+      case 'DOCTOR': return t('roleProf');
       case 'TA': return t('roleTA');
       default: return role || '';
     }
@@ -94,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className={`flex items-center space-x-3 space-x-reverse bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 px-3.5 py-1.5 rounded-xl transition shadow-sm ${isRtl ? 'text-right' : 'text-left'}`}
             >
               <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-semibold text-xs">
-                {currentUser?.role === 'ADMIN' ? '👑' : currentUser?.role === 'PROFESSOR' ? '👨‍🏫' : '🎓'}
+                {currentUser?.role === 'ADMIN' ? '👑' : (currentUser?.role === 'PROFESSOR' || currentUser?.role === 'DOCTOR') ? '👨‍🏫' : '🎓'}
               </div>
               <div className="hidden md:block">
                 <div className="text-xs font-semibold text-white leading-tight flex items-center gap-1.5">
@@ -102,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
                     currentUser?.role === 'ADMIN'
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : currentUser?.role === 'PROFESSOR'
+                      : (currentUser?.role === 'PROFESSOR' || currentUser?.role === 'DOCTOR')
                       ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                       : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}>

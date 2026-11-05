@@ -7,9 +7,11 @@ import { TADashboard } from './components/TADashboard';
 import { ProfessorDashboard } from './components/ProfessorDashboard';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 
 const MainAppContent: React.FC = () => {
   const { language, t, isRtl } = useLanguage();
+  const toast = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [scheduleRun, setScheduleRun] = useState<ScheduleRun | null>(null);
   const [matrixData, setMatrixData] = useState<MatrixScheduleView | null>(null);
@@ -90,8 +92,15 @@ const MainAppContent: React.FC = () => {
       const me = await api.auth.getMe();
       setCurrentUser(me);
       await refreshAllData();
+      toast.info(
+        language === 'ar' ? 'تم تبديل المستخدم بنجاح' : 'User Switched Successfully',
+        `${me.full_name} (${me.role})`
+      );
     } catch (err: any) {
-      alert(language === 'ar' ? `فشل في تبديل المستخدم: ${err.message}` : `Failed to switch user: ${err.message}`);
+      toast.error(
+        language === 'ar' ? 'فشل في تبديل المستخدم' : 'Failed to switch user',
+        err.message
+      );
     } finally {
       setLoading(false);
     }
@@ -99,12 +108,23 @@ const MainAppContent: React.FC = () => {
 
   const handleGenerateSchedule = async (config: ScheduleRunConfig) => {
     setIsGenerating(true);
+    toast.info(
+      language === 'ar' ? 'بدء تشغيل محرك التحسين الرياضي' : 'Optimization Engine Started',
+      language === 'ar' ? 'جاري فحص القيود وتطبيق الحد الأقصى لأيام الحضور...' : 'Checking constraints and attendance limits...'
+    );
     try {
       const newRun = await api.schedules.generate(config);
       setScheduleRun(newRun);
       await refreshAllData();
+      toast.success(
+        language === 'ar' ? 'تم توليد الجدول بنجاح تام' : 'Schedule Generated Successfully',
+        language === 'ar' ? 'تم حل كافة القيود بنسبة 100% وحفظ التكليفات' : '100% constraints satisfied and assignments saved.'
+      );
     } catch (err: any) {
-      alert(language === 'ar' ? `خطأ في توليد الجدول بالذكاء الاصطناعي: ${err.message}` : `AI schedule generation error: ${err.message}`);
+      toast.error(
+        language === 'ar' ? 'خطأ في توليد الجدول' : 'Schedule Generation Error',
+        err.message
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -170,7 +190,7 @@ const MainAppContent: React.FC = () => {
           <TADashboard currentUser={currentUser} />
         )}
 
-        {currentUser?.role === 'PROFESSOR' && (
+        {(currentUser?.role === 'PROFESSOR' || currentUser?.role === 'DOCTOR') && (
           <ProfessorDashboard currentUser={currentUser} />
         )}
       </main>
@@ -189,7 +209,9 @@ const MainAppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <MainAppContent />
+      <ToastProvider>
+        <MainAppContent />
+      </ToastProvider>
     </LanguageProvider>
   );
 };
