@@ -14,6 +14,7 @@ export interface User {
   is_master_student?: boolean;
   max_daily_shifts: number;
   max_total_shifts: number;
+  max_days_per_week?: number;
   is_active: boolean;
   total_assigned_shifts?: number;
   total_assigned_hours?: number;
@@ -141,4 +142,31 @@ export interface ScheduleRunConfig {
   building_proximity_weight: number;
   department_match_weight: number;
   honor_existing_locks: boolean;
+}
+
+export interface VenueSessionSlot {
+  session_id: number;
+  course_code: string;
+  course_name: string;
+  department: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  student_headcount: number;
+  required_professors: number;
+  required_tas: number;
+  lead_professor?: User;
+  tas: User[];
+  is_locked: boolean;
+}
+
+export interface VenueSchedule {
+  venue_id: number;
+  venue_name: string;
+  building: string;
+  floor: number;
+  capacity: number;
+  venue_type: string;
+  total_sessions: number;
+  sessions: VenueSessionSlot[];
 }

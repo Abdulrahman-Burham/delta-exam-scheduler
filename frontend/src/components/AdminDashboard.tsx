@@ -17,6 +17,8 @@ import { AddAssignmentModal } from './AddAssignmentModal';
 import { AddStaffModal } from './AddStaffModal';
 import { AddVenueModal } from './AddVenueModal';
 import { AddExamModal } from './AddExamModal';
+import { StaffScheduleModal } from './StaffScheduleModal';
+import { VenueScheduleModal } from './VenueScheduleModal';
 import { useToast } from '../context/ToastContext';
 import html2canvas from 'html2canvas';
 import {
@@ -54,6 +56,8 @@ import {
   Trash2,
   UserPlus,
   CalendarPlus,
+  Radio,
+  DoorOpen,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -125,8 +129,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showAddExamModal, setShowAddExamModal] = useState<boolean>(false);
   const [preselectedSessionId, setPreselectedSessionId] = useState<number | undefined>(undefined);
   const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
+  const [isReseeding, setIsReseeding] = useState<boolean>(false);
+  const [selectedStaffForSchedule, setSelectedStaffForSchedule] = useState<User | null>(null);
+  const [selectedVenueForSchedule, setSelectedVenueForSchedule] = useState<Venue | null>(null);
 
   const toast = useToast();
+
+  const handleReseedOfficial = async () => {
+    const confirmMsg = language === 'ar'
+      ? 'هل أنت متأكد من استعادة وتطبيق جدول امتحانات الميدتيرم الرسمي المعتمد للكلية (خريف 2026-2027) لجميع المواد والقاعات الـ 33؟'
+      : 'Are you sure you want to apply the official Faculty of AI Fall 2026-2027 timetable?';
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsReseeding(true);
+    try {
+      await api.admin.reseed();
+      toast.success(language === 'ar' ? 'تم تطبيق جدول الامتحانات الرسمي وتسكين المراقبات بنجاح!' : 'Official timetable and proctor assignments applied!');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to apply official timetable');
+    } finally {
+      setIsReseeding(false);
+    }
+  };
 
   const handleDeleteAssignment = async (assignmentId: number, userName?: string, courseName?: string) => {
     const confirmMsg = language === 'ar'
@@ -328,6 +353,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <FileDown className="w-4 h-4 text-cyan-400" />
               <span>{t('adminExportPdf')}</span>
             </a>
+
+            <button
+              onClick={handleReseedOfficial}
+              disabled={isGenerating || isReseeding}
+              className="flex items-center space-x-1.5 space-x-reverse px-4 py-2.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30 transition duration-200 shadow-sm disabled:opacity-50"
+              title={language === 'ar' ? 'استعادة وتطبيق الجدول المعتمد بختم العميد والوكيل (PDF)' : 'Reset and Apply Official Timetable (PDF)'}
+            >
+              <RefreshCw className={`w-4 h-4 text-amber-400 ${isReseeding ? 'animate-spin' : ''}`} />
+              <span>{language === 'ar' ? 'تطبيق الجدول الرسمي المعتمد' : 'Apply Official Schedule'}</span>
+            </button>
           </div>
         </div>
 
@@ -1401,6 +1436,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="text-sm font-bold text-emerald-400 mt-0.5">{hours} {t('hoursCount')}</div>
                       </div>
                     </div>
+
+                    <button
+                      onClick={() => setSelectedStaffForSchedule(u)}
+                      className="w-full flex items-center justify-center space-x-1.5 space-x-reverse py-2 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition shadow-sm mt-2"
+                    >
+                      <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                      <span>{language === 'ar' ? 'عرض الجدول وموقعه الآن' : 'View Schedule & Live Location'}</span>
+                    </button>
                   </div>
                 );
               })}
@@ -1440,7 +1483,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div className="text-[11px] text-slate-400">{v.building} • {t('venueFloorText')} {v.floor}</div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedVenueForSchedule(v)}
+                      className="flex items-center space-x-1 space-x-reverse px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold transition shadow-sm"
+                      title={language === 'ar' ? 'عرض جدول المقر ومن فيه الآن' : 'View Schedule & Current Occupants'}
+                    >
+                      <DoorOpen className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? 'الجدول والإشغال' : 'Schedule'}</span>
+                    </button>
                     <div className="text-end">
                       <div className="font-bold text-emerald-400">{v.capacity} {t('venueCapacityText')}</div>
                       <div className="text-[10px] text-slate-500">{t('venueCapacityLabel')}</div>
@@ -1700,6 +1751,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           venues={venues}
           onClose={() => setShowAddExamModal(false)}
           onSuccess={() => onRefresh()}
+        />
+      )}
+
+      {/* Staff Schedule & Live Location Modal */}
+      {selectedStaffForSchedule && (
+        <StaffScheduleModal
+          user={selectedStaffForSchedule}
+          onClose={() => setSelectedStaffForSchedule(null)}
+        />
+      )}
+
+      {/* Venue Schedule & Occupancy Modal */}
+      {selectedVenueForSchedule && (
+        <VenueScheduleModal
+          venue={selectedVenueForSchedule}
+          onClose={() => setSelectedVenueForSchedule(null)}
         />
       )}
     </div>

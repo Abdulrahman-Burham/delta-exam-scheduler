@@ -8,6 +8,7 @@ import {
   MatrixScheduleView,
   ScheduleAnalytics,
   AvailabilityConstraint,
+  VenueSchedule,
 } from '../types';
 
 const API_BASE = '/api';
@@ -101,6 +102,20 @@ export const api = {
       const res = await secureFetch(`${API_BASE}/admin/system-stats`);
       return handleResponse<any>(res);
     },
+    reseed: async () => {
+      const res = await secureFetch(`${API_BASE}/admin/reseed`, {
+        method: 'POST',
+      });
+      return handleResponse<{
+        status: string;
+        message: string;
+        total_users: number;
+        total_venues: number;
+        total_exam_sessions: number;
+        total_assignments: number;
+        schedule_run_id: number;
+      }>(res);
+    },
   },
 
   // Faculty & Staff
@@ -172,6 +187,10 @@ export const api = {
       });
       if (!res.ok) throw new Error('Failed to delete venue');
       return true;
+    },
+    getSchedule: async (id: number) => {
+      const res = await secureFetch(`${API_BASE}/schedules/venue/${id}`);
+      return handleResponse<VenueSchedule>(res);
     },
   },
 

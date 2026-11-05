@@ -19,6 +19,8 @@ from app.schemas.schedule import (
     ToggleLockRequest,
     MatrixScheduleView,
     MatrixSlotItem,
+    VenueScheduleOut,
+    VenueSessionSlot,
 )
 from app.schemas.user import UserOut
 from app.services.optimizer import InvigilationOptimizer
@@ -458,3 +460,87 @@ def get_user_schedule(
     )
 
     return [ScheduleAssignmentDetail.model_validate(a) for a in assignments]
+
+
+@router.get("/venue/{venue_id}", response_model=VenueScheduleOut)
+def get_venue_schedule(
+    venue_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns the full timetable of exams scheduled in a specific Venue (Lab or Lecture Hall),
+    along with currently assigned Lead Professors and TAs for each session.
+    """
+    venue = db.query(Venue).filter(Venue.id == venue_id).first()
+    if not venue:
+        raise HTTPException(status_code=404, detail="Venue not found")
+
+    active_run = db.query(ScheduleRun).filter(ScheduleRun.is_current_active == True).first()
+
+    sessions = (
+        db.query(ExamSession)
+        .filter(ExamSession.venue_id == venue_id)
+        .order_by(ExamSession.date.asc(), ExamSession.start_time.asc())
+        .all()
+    )
+
+    session_ids = [s.id for s in sessions]
+    assignments_by_session: Dict[int, List[ScheduleAssignment]] = {}
+
+    if active_run and session_ids:
+        assignments = (
+            db.query(ScheduleAssignment)
+            .filter(
+                ScheduleAssignment.schedule_run_id == active_run.id,
+                ScheduleAssignment.exam_session_id.in_(session_ids)
+            )
+            .options(joinedload(ScheduleAssignment.user))
+            .all()
+        )
+        for a in assignments:
+            assignments_by_session.setdefault(a.exam_session_id, []).append(a)
+
+    slot_items = []
+    for s in sessions:
+        s_assigns = assignments_by_session.get(s.id, [])
+        lead_prof = None
+        tas = []
+        is_locked = False
+
+        for a in s_assigns:
+            if a.is_locked:
+                is_locked = True
+            if a.role_in_exam == AssignmentRoleEnum.LEAD_PROFESSOR and a.user:
+                lead_prof = UserOut.model_validate(a.user)
+            elif a.role_in_exam == AssignmentRoleEnum.INVIGILATOR_TA and a.user:
+                tas.append(UserOut.model_validate(a.user))
+
+        slot_items.append(
+            VenueSessionSlot(
+                session_id=s.id,
+                course_code=s.course_code,
+                course_name=s.course_name,
+                department=s.department,
+                date=s.date,
+                start_time=s.start_time,
+                end_time=s.end_time,
+                student_headcount=s.student_headcount,
+                required_professors=s.required_professors,
+                required_tas=s.required_tas,
+                lead_professor=lead_prof,
+                tas=tas,
+                is_locked=is_locked,
+            )
+        )
+
+    return VenueScheduleOut(
+        venue_id=venue.id,
+        venue_name=venue.name,
+        building=venue.building,
+        floor=venue.floor,
+        capacity=venue.capacity,
+        venue_type=venue.venue_type.value if hasattr(venue.venue_type, "value") else str(venue.venue_type),
+        total_sessions=len(slot_items),
+        sessions=slot_items,
+    )

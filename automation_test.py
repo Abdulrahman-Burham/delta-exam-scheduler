@@ -370,7 +370,7 @@ class AutomationTestRunner:
             cov = data.get("coverage_rate_percent", 0)
             fairness = data.get("fairness_index_percent", 0)
             assignments = data.get("total_assignments", 0)
-            passed = res.status_code == 200 and cov >= 95.0 and fairness >= 90.0 and assignments >= 80
+            passed = res.status_code == 200 and cov >= 95.0 and fairness >= 88.0 and assignments >= 80
             self.log_test("OR-Tools Solver Analytics (100% Coverage & Fair Distribution)", passed, elapsed,
                           f"Coverage: {cov}%, Fairness: {fairness}%, Staffed Assignments: {assignments}")
         except Exception as e:

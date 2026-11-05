@@ -21,13 +21,19 @@ def seed_database(db: Session, force: bool = False):
 
     # If force, clear existing
     if force:
-        db.query(ScheduleAssignment).delete()
-        db.query(ScheduleRun).delete()
-        db.query(AvailabilityConstraint).delete()
-        db.query(ExamSession).delete()
-        db.query(Venue).delete()
-        db.query(User).delete()
-        db.commit()
+        try:
+            db.query(ScheduleAssignment).delete()
+            db.query(ScheduleRun).delete()
+            db.query(AvailabilityConstraint).delete()
+            db.query(ExamSession).delete()
+            db.query(Venue).delete()
+            db.query(User).delete()
+            db.commit()
+        except Exception:
+            db.rollback()
+            from app.database import Base, engine
+            Base.metadata.drop_all(bind=engine)
+            Base.metadata.create_all(bind=engine)
 
     # ----------------------------------------------------
     # 1. Leadership (Dean & Vice Dean)
@@ -43,6 +49,7 @@ def seed_database(db: Session, force: bool = False):
         phone="+20 100 000 0001",
         max_daily_shifts=2,
         max_total_shifts=6,
+        max_days_per_week=3,
         is_active=True,
     )
     db.add(dean)
@@ -50,7 +57,7 @@ def seed_database(db: Session, force: bool = False):
     vice_dean = User(
         staff_id="VDEAN-02",
         email="tarek.hassan@deltauniv.edu.eg",
-        hashed_password=get_password_hash("ProfPass123!"),
+        hashed_password=get_password_hash("AdminPass123!"),
         full_name="Assoc. Prof. Dr. Tarek Hassan (أ.م.د/ طارق حسن)",
         role=RoleEnum.ADMIN,
         department="Artificial Intelligence",
@@ -58,6 +65,7 @@ def seed_database(db: Session, force: bool = False):
         phone="+20 100 000 0002",
         max_daily_shifts=2,
         max_total_shifts=6,
+        max_days_per_week=3,
         is_active=True,
     )
     db.add(vice_dean)
@@ -150,11 +158,12 @@ def seed_database(db: Session, force: bool = False):
         # Master's degree students get 2 days off per week for research & thesis
         master_ids = {2, 4, 8, 14, 20, 24, 28, 34, 38, 48, 56, 58}
         is_master = (role == RoleEnum.TA and id_num in master_ids)
+        pwd = "DoctorPass123!" if role in (RoleEnum.DOCTOR, RoleEnum.PROFESSOR) else "TAPass123!"
 
         user = User(
             staff_id=f"DU-AI-{id_num:03d}",
             email=email,
-            hashed_password=get_password_hash("DeltaPass123!"),
+            hashed_password=get_password_hash(pwd),
             full_name=f"{en_slug} ({ar_name})",
             role=role,
             department="Faculty of Artificial Intelligence (كلية الذكاء الاصطناعي)",
@@ -163,6 +172,7 @@ def seed_database(db: Session, force: bool = False):
             is_master_student=is_master,
             max_daily_shifts=3,
             max_total_shifts=25,
+            max_days_per_week=2 if is_master else 3,
             is_active=True,
         )
         db.add(user)
@@ -201,7 +211,7 @@ def seed_database(db: Session, force: bool = False):
 
     # Other Faculties Venues (Page 5)
     external_venues = [
-        ("PT (Physical Therapy)", VenueTypeEnum.HALL, "Faculty of Physical Therapy (العلاج الطبيعي)", 3, 308, 60),
+        ("PT", VenueTypeEnum.HALL, "Faculty of Physical Therapy (العلاج الطبيعي)", 3, 308, 60),
         ("M1", VenueTypeEnum.HALL, "Faculty of Medicine (الطب البشري)", 1, 101, 50),
         ("M2", VenueTypeEnum.HALL, "Faculty of Medicine (الطب البشري)", 1, 102, 50),
         ("M3", VenueTypeEnum.HALL, "Faculty of Medicine (الطب البشري)", 1, 103, 50),
@@ -235,42 +245,55 @@ def seed_database(db: Session, force: bool = False):
         )
         db.add(v)
         venue_map[short_code] = v
+        if short_code == "PT":
+            venue_map["PT (Physical Therapy)"] = v
 
     db.flush()
 
     # ----------------------------------------------------
-    # 4. Exam Sessions from Pages 1 to 4 of Final Time Table
+    # 4. Official Exam Timetable from Pages 1 to 4 of Final Time Table
     # ----------------------------------------------------
-    # Parse sessions into room-specific slots so each allocated room gets invigilators!
     raw_schedule = [
-        # --- Saturday 7-11-2026 ---
+        # =========================================================================
+        # Day 1: Saturday 7-11-2026 (السبت 7-11-2026)
+        # =========================================================================
         ("BAS112", "Calculus", "Basic Sciences", date(2026, 11, 7), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS112", "Calculus (Group 2)", "Basic Sciences", date(2026, 11, 7), time(10, 15), time(11, 0), 397,
+        ("BAS112", "Calculus", "Basic Sciences", date(2026, 11, 7), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS112", "Calculus (Group 3)", "Basic Sciences", date(2026, 11, 7), time(11, 15), time(12, 0), 82,
+        ("BAS112", "Calculus", "Basic Sciences", date(2026, 11, 7), time(11, 15), time(12, 0), 82,
          ["Lab6", "Lab7"]),
         ("AI 413", "Interactive Systems Design", "Artificial Intelligence", date(2026, 11, 7), time(11, 15), time(12, 0), 221,
          ["Lab4", "Lab5", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
         ("CSC311", "Big Data Analytics", "Computer Science", date(2026, 11, 7), time(13, 15), time(14, 0), 262,
          ["Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("CSC311", "Big Data Analytics (Group 2)", "Computer Science", date(2026, 11, 7), time(14, 15), time(15, 0), 284,
+        ("CSC311", "Big Data Analytics", "Computer Science", date(2026, 11, 7), time(14, 15), time(15, 0), 284,
          ["Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
         ("BIO411", "Genetic Engineering", "Bioinformatics", date(2026, 11, 7), time(15, 15), time(16, 0), 121,
          ["Lab2", "Lab3", "Lab4", "Lab6"]),
         ("SECE43", "Virtualization and Cloud Security", "Cybersecurity", date(2026, 11, 7), time(15, 15), time(16, 0), 191,
          ["Lab5", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11"]),
+        ("BIO324", "Bioinformatics Programming", "Bioinformatics", date(2026, 11, 7), time(15, 15), time(16, 0), 2,
+         ["Lab2"]),
+        ("BIO422", "Computational Gene Finding and Genome Assembly", "Bioinformatics", date(2026, 11, 7), time(15, 15), time(16, 0), 1,
+         ["Lab2"]),
+        ("SEC424", "Digital Forensics", "Cybersecurity", date(2026, 11, 7), time(15, 15), time(16, 0), 1,
+         ["Lab2"]),
+        ("SECE32", "Ethical Hacking", "Cybersecurity", date(2026, 11, 7), time(15, 15), time(16, 0), 1,
+         ["Lab2"]),
         ("AI325", "Human Computer Interaction", "Artificial Intelligence", date(2026, 11, 7), time(15, 15), time(16, 0), 15,
          ["Lab11"]),
 
-        # --- Sunday 8-11-2026 ---
+        # =========================================================================
+        # Day 2: Sunday 8-11-2026 (الأحد 8-11-2026)
+        # =========================================================================
         ("BAS113", "Linear Algebra", "Basic Sciences", date(2026, 11, 8), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS113", "Linear Algebra (Group 2)", "Basic Sciences", date(2026, 11, 8), time(10, 15), time(11, 0), 397,
+        ("BAS113", "Linear Algebra", "Basic Sciences", date(2026, 11, 8), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS113", "Linear Algebra (Group 3)", "Basic Sciences", date(2026, 11, 8), time(11, 15), time(12, 0), 397,
+        ("BAS113", "Linear Algebra", "Basic Sciences", date(2026, 11, 8), time(11, 15), time(12, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS113", "Linear Algebra (Group 4)", "Basic Sciences", date(2026, 11, 8), time(12, 15), time(13, 0), 118,
+        ("BAS113", "Linear Algebra", "Basic Sciences", date(2026, 11, 8), time(12, 15), time(13, 0), 118,
          ["Lab3", "Lab4", "Lab10", "Lab11"]),
         ("BAS126", "Discrete Structures", "Basic Sciences", date(2026, 11, 8), time(12, 15), time(13, 0), 146,
          ["Lab5", "Lab7", "Lab8", "Lab9"]),
@@ -278,110 +301,208 @@ def seed_database(db: Session, force: bool = False):
          ["Lab6"]),
         ("AI314", "Agent Based Systems", "Artificial Intelligence", date(2026, 11, 8), time(13, 15), time(14, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("AI314", "Agent Based Systems (Group 2)", "Artificial Intelligence", date(2026, 11, 8), time(14, 15), time(15, 0), 121,
+        ("AI314", "Agent Based Systems", "Artificial Intelligence", date(2026, 11, 8), time(14, 15), time(15, 0), 121,
          ["Lab1", "Lab2", "Lab3", "Lab6"]),
         ("BIO315", "Molecular and cell biology", "Bioinformatics", date(2026, 11, 8), time(14, 15), time(15, 0), 81,
          ["Lab7", "Lab8"]),
         ("AIMATH2", "Mathematics for AI", "Artificial Intelligence", date(2026, 11, 8), time(15, 15), time(16, 0), 185,
-         ["Lab3", "Lab4", "Lab5", "Lab11", "Lab9", "Lab10"]),
+         ["Lab3", "Lab4", "Lab5", "Lab9", "Lab10", "Lab11"]),
+        ("AI324", "Automated Reasoning", "Artificial Intelligence", date(2026, 11, 8), time(15, 15), time(16, 0), 10,
+         ["Lab1"]),
+        ("AI421", "Data Center Virtualization", "Artificial Intelligence", date(2026, 11, 8), time(15, 15), time(16, 0), 7,
+         ["Lab1"]),
         ("CSC322", "Cloud Architecture and Computing", "Computer Science", date(2026, 11, 8), time(15, 15), time(16, 0), 35,
          ["Lab8"]),
 
-        # --- Monday 9-11-2026 ---
-        ("AI216", "Machine Learning and Pattern Recognition", "Artificial Intelligence", date(2026, 11, 9), time(9, 15), time(10, 0), 397,
+        # =========================================================================
+        # Day 3: Monday 9-11-2026 (الإثنين 9-11-2026)
+        # =========================================================================
+        ("AI216", "Machine learning and Pattern Recognition", "Artificial Intelligence", date(2026, 11, 9), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("AI216", "Machine Learning and Pattern Recognition (Gr 2)", "Artificial Intelligence", date(2026, 11, 9), time(10, 15), time(11, 0), 397,
+        ("AI216", "Machine learning and Pattern Recognition", "Artificial Intelligence", date(2026, 11, 9), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("AI216", "Machine Learning and Pattern Recognition (Gr 3)", "Artificial Intelligence", date(2026, 11, 9), time(11, 15), time(12, 0), 397,
+        ("AI216", "Machine learning and Pattern Recognition", "Artificial Intelligence", date(2026, 11, 9), time(11, 15), time(12, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("AI216", "Machine learning and Pattern Recognition", "Artificial Intelligence", date(2026, 11, 9), time(12, 15), time(13, 0), 82,
+         ["Lab7", "Lab8"]),
         ("AI 411", "Principles and Design of IoT Systems", "Artificial Intelligence", date(2026, 11, 9), time(12, 15), time(13, 0), 221,
          ["Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab10", "Lab11"]),
         ("BIO413", "Genomics and Proteomics", "Bioinformatics", date(2026, 11, 9), time(13, 15), time(14, 0), 123,
          ["Lab1", "Lab2", "Lab3", "Lab6"]),
+        ("AI224", "Artificial Intelligence Programming Languages", "Artificial Intelligence", date(2026, 11, 9), time(13, 15), time(14, 0), 42,
+         ["Lab7"]),
         ("SEC411", "Foundations of Cyber Security", "Cybersecurity", date(2026, 11, 9), time(14, 15), time(15, 0), 228,
          ["Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab8", "Lab9"]),
 
-        # --- Tuesday 10-11-2026 ---
+        # =========================================================================
+        # Day 4: Tuesday 10-11-2026 (الثلاثاء 10-11-2026)
+        # =========================================================================
         ("BAS114", "Physics", "Basic Sciences", date(2026, 11, 10), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS114", "Physics (Group 2)", "Basic Sciences", date(2026, 11, 10), time(10, 15), time(11, 0), 397,
+        ("BAS114", "Physics", "Basic Sciences", date(2026, 11, 10), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS114", "Physics (Group 3)", "Basic Sciences", date(2026, 11, 10), time(11, 15), time(12, 0), 397,
+        ("BAS114", "Physics", "Basic Sciences", date(2026, 11, 10), time(11, 15), time(12, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("BAS114", "Physics", "Basic Sciences", date(2026, 11, 10), time(12, 15), time(13, 0), 152,
+         ["Lab3", "Lab5", "Lab6", "Lab7"]),
+        ("BIO314", "Biological data base", "Bioinformatics", date(2026, 11, 10), time(12, 15), time(13, 0), 76,
+         ["Lab1", "Lab2", "Lab4"]),
+        ("AI323", "Computational Neuroscience", "Artificial Intelligence", date(2026, 11, 10), time(12, 15), time(13, 0), 26,
+         ["Lab8"]),
         ("CSC312", "Computer Security and Cryptography", "Cybersecurity", date(2026, 11, 10), time(13, 15), time(14, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("CSC312", "Computer Security and Cryptography (Gr 2)", "Cybersecurity", date(2026, 11, 10), time(14, 15), time(15, 0), 159,
+        ("CSC312", "Computer Security and Cryptography", "Cybersecurity", date(2026, 11, 10), time(14, 15), time(15, 0), 159,
          ["Lab5", "Lab6", "Lab7", "Lab8"]),
         ("AI127", "Introduction to Artificial Intelligence", "Artificial Intelligence", date(2026, 11, 10), time(14, 15), time(15, 0), 52,
          ["Lab3", "Lab4"]),
+        ("AI423", "Wireless Sensor Protocols and Programming", "Artificial Intelligence", date(2026, 11, 10), time(14, 15), time(15, 0), 5,
+         ["Lab1"]),
+        ("AI422", "Embedded and Real Time Operating Systems", "Artificial Intelligence", date(2026, 11, 10), time(14, 15), time(15, 0), 8,
+         ["Lab1"]),
+        ("SEC 48", "New Trends on Cyber Security", "Cybersecurity", date(2026, 11, 10), time(14, 15), time(15, 0), 5,
+         ["Lab1"]),
 
-        # --- Wednesday 11-11-2026 ---
+        # =========================================================================
+        # Day 5: Wednesday 11-11-2026 (الأربعاء 11-11-2026)
+        # =========================================================================
         ("AI215", "Digital Logic Design", "Artificial Intelligence", date(2026, 11, 11), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("AI215", "Digital Logic Design (Group 2)", "Artificial Intelligence", date(2026, 11, 11), time(10, 15), time(11, 0), 397,
+        ("AI215", "Digital Logic Design", "Artificial Intelligence", date(2026, 11, 11), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("AI215", "Digital Logic Design (Group 3)", "Artificial Intelligence", date(2026, 11, 11), time(11, 15), time(12, 0), 397,
+        ("AI215", "Digital Logic Design", "Artificial Intelligence", date(2026, 11, 11), time(11, 15), time(12, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("AI215", "Digital Logic Design", "Artificial Intelligence", date(2026, 11, 11), time(12, 15), time(13, 0), 61,
+         ["Lab8", "Lab9"]),
+        ("AI225", "Processing Formal and Natural Languages", "Artificial Intelligence", date(2026, 11, 11), time(12, 15), time(13, 0), 76,
+         ["Lab5", "Lab7"]),
         ("AI 412", "Theory of Automata and Formal Languages", "Artificial Intelligence", date(2026, 11, 11), time(13, 15), time(14, 0), 218,
-         ["Lab3", "Lab4", "Lab5", "Lab8", "Lab7", "Lab10", "Lab11"]),
+         ["Lab3", "Lab4", "Lab5", "Lab7", "Lab8", "Lab10", "Lab11"]),
+        ("BIO423", "Biometrics", "Bioinformatics", date(2026, 11, 11), time(13, 15), time(14, 0), 21,
+         ["Lab9"]),
+        ("SEC423", "Verification of Formal Reactive Systems", "Cybersecurity", date(2026, 11, 11), time(13, 15), time(14, 0), 6,
+         ["Lab9"]),
+        ("BIO412", "Biological Sequence Analysis", "Bioinformatics", date(2026, 11, 11), time(14, 15), time(15, 0), 97,
+         ["Lab6", "Lab7"]),
+        ("AIE431", "Cloud Storage Infrastructure", "Artificial Intelligence", date(2026, 11, 11), time(14, 15), time(15, 0), 19,
+         ["Lab1"]),
         ("SEC413", "Network Visualization and Vulnerability Detection", "Cybersecurity", date(2026, 11, 11), time(15, 15), time(16, 0), 225,
          ["Lab2", "Lab3", "Lab4", "Lab6", "Lab7", "Lab10", "Lab11"]),
+        ("SEC422", "Cyber Security Risk Management", "Cybersecurity", date(2026, 11, 11), time(15, 15), time(16, 0), 1,
+         ["Lab2"]),
 
-        # --- Thursday 12-11-2026 ---
+        # =========================================================================
+        # Day 6: Thursday 12-11-2026 (الخميس 12-11-2026)
+        # =========================================================================
         ("BAS116", "Basic Electricity & Electronics", "Basic Sciences", date(2026, 11, 12), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS116", "Basic Electricity & Electronics (Gr 2)", "Basic Sciences", date(2026, 11, 12), time(10, 15), time(11, 0), 397,
+        ("BAS116", "Basic Electricity & Electronics", "Basic Sciences", date(2026, 11, 12), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("BAS116", "Basic Electricity & Electronics", "Basic Sciences", date(2026, 11, 12), time(11, 15), time(12, 0), 397,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("BAS116", "Basic Electricity & Electronics", "Basic Sciences", date(2026, 11, 12), time(12, 15), time(13, 0), 125,
+         ["Lab4", "Lab5", "Lab10", "Lab11"]),
+        ("BIO312", "Introduction to Bioinformatics", "Bioinformatics", date(2026, 11, 12), time(12, 15), time(13, 0), 85,
+         ["Lab6", "Lab8"]),
         ("AI315", "Computational Cognitive Science", "Artificial Intelligence", date(2026, 11, 12), time(13, 15), time(14, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("AI315", "Computational Cognitive Science", "Artificial Intelligence", date(2026, 11, 12), time(14, 15), time(15, 0), 141,
+         ["Lab4", "Lab5", "Lab7", "Lab8"]),
         ("GEN101", "English Language II", "Humanities", date(2026, 11, 12), time(15, 15), time(16, 0), 186,
          ["Lab5", "Lab6", "Lab7", "Lab8", "Lab9"]),
 
-        # --- Saturday 14-11-2026 ---
+        # =========================================================================
+        # Day 7: Saturday 14-11-2026 (السبت 14-11-2026)
+        # =========================================================================
         ("CSC213", "Data Mining and Exploration", "Computer Science", date(2026, 11, 14), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("CSC213", "Data Mining and Exploration (Gr 2)", "Computer Science", date(2026, 11, 14), time(10, 15), time(11, 0), 397,
+        ("CSC213", "Data Mining and Exploration", "Computer Science", date(2026, 11, 14), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC213", "Data Mining and Exploration", "Computer Science", date(2026, 11, 14), time(11, 15), time(12, 0), 269,
+         ["Lab3", "Lab4", "Lab5", "Lab6", "Lab8", "Lab9", "Lab10", "Lab11"]),
         ("AI424", "Deep Learning", "Artificial Intelligence", date(2026, 11, 14), time(13, 15), time(14, 0), 28,
          ["Lab4"]),
 
-        # --- Sunday 15-11-2026 ---
+        # =========================================================================
+        # Day 8: Sunday 15-11-2026 (الأحد 15-11-2026)
+        # =========================================================================
         ("CSC115", "Introduction to Computer Systems", "Computer Science", date(2026, 11, 15), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("CSC115", "Introduction to Computer Systems (Gr 2)", "Computer Science", date(2026, 11, 15), time(10, 15), time(11, 0), 397,
+        ("CSC115", "Introduction to Computer Systems", "Computer Science", date(2026, 11, 15), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC115", "Introduction to Computer Systems", "Computer Science", date(2026, 11, 15), time(11, 15), time(12, 0), 397,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC115", "Introduction to Computer Systems", "Computer Science", date(2026, 11, 15), time(12, 15), time(13, 0), 50,
+         ["Lab1", "Lab2"]),
+        ("AIE42", "Software Architecture and Interoperability", "Artificial Intelligence", date(2026, 11, 15), time(12, 15), time(13, 0), 6,
+         ["Lab3"]),
+        ("CSC313", "Data Structure", "Computer Science", date(2026, 11, 15), time(12, 15), time(13, 0), 173,
+         ["Lab4", "Lab6", "Lab7", "Lab8", "Lab9"]),
+        ("CSC313", "Data Structure", "Computer Science", date(2026, 11, 15), time(13, 15), time(14, 0), 350,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC313", "Algorithms and Data Structure", "Computer Science", date(2026, 11, 15), time(13, 15), time(14, 0), 40,
+         ["Lab7"]),
 
-        # --- Monday 16-11-2026 ---
+        # =========================================================================
+        # Day 9: Monday 16-11-2026 (الإثنين 16-11-2026)
+        # =========================================================================
         ("CSC214", "Computer Networks and Data Communication", "Computer Science", date(2026, 11, 16), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC214", "Computer Networks and Data Communication", "Computer Science", date(2026, 11, 16), time(10, 15), time(11, 0), 397,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC214", "Computer Networks and Data Communication", "Computer Science", date(2026, 11, 16), time(11, 15), time(12, 0), 397,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("CSC214", "Computer Networks and Data Communication", "Computer Science", date(2026, 11, 16), time(12, 15), time(13, 0), 65,
+         ["Lab11", "Lab12"]),
         ("AI 414", "Cyber-Physical Systems", "Artificial Intelligence", date(2026, 11, 16), time(12, 15), time(13, 0), 332,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10"]),
+        ("AI 414", "Cyber-Physical Systems", "Artificial Intelligence", date(2026, 11, 16), time(13, 15), time(14, 0), 83,
+         ["Lab3", "Lab4", "Lab5"]),
+        ("BIO414", "Bio-mathematics", "Bioinformatics", date(2026, 11, 16), time(13, 15), time(14, 0), 99,
+         ["Lab1", "Lab2", "Lab6"]),
 
-        # --- Tuesday 17-11-2026 ---
+        # =========================================================================
+        # Day 10: Tuesday 17-11-2026 (الثلاثاء 17-11-2026)
+        # =========================================================================
         ("BAS211", "Numerical Computation", "Basic Sciences", date(2026, 11, 17), time(9, 15), time(10, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
-        ("BAS211", "Numerical Computation (Group 2)", "Basic Sciences", date(2026, 11, 17), time(10, 15), time(11, 0), 397,
+        ("BAS211", "Numerical Computation", "Basic Sciences", date(2026, 11, 17), time(10, 15), time(11, 0), 397,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("BAS211", "Numerical Computation", "Basic Sciences", date(2026, 11, 17), time(11, 15), time(12, 0), 380,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11", "Lab12"]),
+        ("SEC421", "Secure Systems Architecture", "Cybersecurity", date(2026, 11, 17), time(11, 15), time(12, 0), 3,
+         ["Lab1"]),
 
-        # --- Wednesday 18-11-2026 (Cross-Faculty Exam) ---
+        # =========================================================================
+        # Day 11: Wednesday 18-11-2026 (Cross-Faculty Exam) (الأربعاء 18-11-2026)
+        # =========================================================================
         ("GEN002", "English Language I", "Humanities", date(2026, 11, 18), time(11, 15), time(12, 0), 250,
-         ["P1", "P2", "P3", "M1", "M2", "M3", "PT (Physical Therapy)", "Ph1", "Ph2"]),
-        ("GEN002", "English Language I (Group 2)", "Humanities", date(2026, 11, 18), time(12, 15), time(13, 0), 366,
-         ["B1", "B2", "E1", "E2", "E3", "E4", "P1", "P2", "P3", "PT (Physical Therapy)", "Ph1", "Ph2"]),
-        ("GEN002", "English Language I (Group 3)", "Humanities", date(2026, 11, 18), time(13, 15), time(14, 0), 160,
+         ["P1", "P2", "P3", "M1", "M2", "M3", "PT", "Ph1", "Ph2"]),
+        ("GEN002", "English Language I", "Humanities", date(2026, 11, 18), time(12, 15), time(13, 0), 366,
+         ["B1", "B2", "E1", "E2", "E3", "E4", "P1", "P2", "P3", "PT", "Ph1", "Ph2"]),
+        ("GEN002", "English Language I", "Humanities", date(2026, 11, 18), time(13, 15), time(14, 0), 160,
          ["E1", "E2", "E3", "E4", "B1", "B2"]),
+        ("GEN002", "English Language I", "Humanities", date(2026, 11, 18), time(14, 15), time(15, 0), 162,
+         ["Lab7", "Lab8", "Lab9", "Lab10", "Lab11"]),
 
-        # --- Thursday 19-11-2026 ---
+        # =========================================================================
+        # Day 12: Thursday 19-11-2026 (الخميس 19-11-2026)
+        # =========================================================================
         ("BAS212", "Operations Research", "Basic Sciences", date(2026, 11, 19), time(9, 15), time(10, 0), 270,
          ["Lab3", "Lab4", "Lab5", "Lab6", "Lab8", "Lab9", "Lab10", "Lab11"]),
-        ("AIE46", "New Trends in AI", "Artificial Intelligence", date(2026, 11, 19), time(12, 15), time(13, 0), 201,
+        ("BAS212", "Operations Research", "Basic Sciences", date(2026, 11, 19), time(10, 15), time(11, 0), 270,
+         ["Lab3", "Lab4", "Lab5", "Lab6", "Lab8", "Lab9", "Lab10", "Lab11"]),
+        ("BAS212", "Operations Research", "Basic Sciences", date(2026, 11, 19), time(11, 15), time(12, 0), 352,
+         ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7", "Lab8", "Lab9", "Lab10", "Lab11"]),
+        ("AIE46", "New trends in AI", "Artificial Intelligence", date(2026, 11, 19), time(12, 15), time(13, 0), 201,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab6", "Lab7"]),
-        ("SEC412", "Cyber Incident Response and Forensics", "Cybersecurity", date(2026, 11, 19), time(13, 15), time(14, 0), 231,
+        ("SEC412", "Cyber Incident Response and Computer Network Forensics", "Cybersecurity", date(2026, 11, 19), time(13, 15), time(14, 0), 231,
          ["Lab1", "Lab2", "Lab3", "Lab4", "Lab5", "Lab6", "Lab7"]),
     ]
 
     # Create exam session records per venue so invigilators are placed in specific rooms!
     session_count = 0
+    shared_slots_seen = set()
+
     for ccode, cname, dept, edate, stime, etime, total_students, rooms in raw_schedule:
         per_room_students = max(1, total_students // len(rooms))
         for r in rooms:
@@ -390,22 +511,29 @@ def seed_database(db: Session, force: bool = False):
                 continue
 
             session_count += 1
-            # Primary room receives the Course Lead Professor (رئيس اللجنة / أستاذ المقرر)
+            # Primary room receives the Course Lead Professor (أستاذ المقرر)
             req_prof = 1 if r == rooms[0] else 0
 
             # Delta University Real-World Academic Rule:
-            # Computer Labs typically require 2 invigilators (معمل حاسب آلي: مراقبان)
-            # Lecture Halls require more (3 to 4 proctors depending on hall capacity)
-            if venue.venue_type == VenueTypeEnum.LAB:
-                req_ta = 2
-            elif venue.venue_type == VenueTypeEnum.HALL:
-                req_ta = 3 if venue.capacity <= 50 else 4
+            # Computer Labs require 1 TA invigilator
+            # Large Cross-Faculty Lecture Halls require 2 TAs
+            # If multiple small courses share the same room at the same time,
+            # only 1 proctor is required for that physical room
+            slot_room_key = (edate, stime, r)
+            if slot_room_key in shared_slots_seen:
+                req_ta = 0
             else:
-                req_ta = 2
+                shared_slots_seen.add(slot_room_key)
+                if venue.venue_type == VenueTypeEnum.LAB:
+                    req_ta = 1
+                elif venue.venue_type == VenueTypeEnum.HALL:
+                    req_ta = 2 if venue.capacity >= 50 else 1
+                else:
+                    req_ta = 1
 
             sess = ExamSession(
                 course_code=ccode,
-                course_name=f"{cname} — [{r}]",
+                course_name=cname,
                 department=dept,
                 date=edate,
                 start_time=stime,

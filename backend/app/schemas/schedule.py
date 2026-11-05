@@ -121,3 +121,30 @@ class ScheduleAnalyticsOut(BaseModel):
     workload_distribution: List[UserWorkloadStat]
     solver_status: str
     algorithm_used: str
+
+
+class VenueSessionSlot(BaseModel):
+    session_id: int
+    course_code: str
+    course_name: str
+    department: str
+    date: DateType
+    start_time: TimeType
+    end_time: TimeType
+    student_headcount: int
+    required_professors: int
+    required_tas: int
+    lead_professor: Optional[UserOut] = None
+    tas: List[UserOut] = []
+    is_locked: bool = False
+
+
+class VenueScheduleOut(BaseModel):
+    venue_id: int
+    venue_name: str
+    building: str
+    floor: int
+    capacity: int
+    venue_type: str
+    total_sessions: int
+    sessions: List[VenueSessionSlot]
