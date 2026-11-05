@@ -48,6 +48,9 @@ import {
   Phone,
   GraduationCap,
   Award,
+  ArrowLeftRight,
+  MessageCircle,
+  X,
   ShieldCheck,
   ChevronDown,
   ChevronUp,
@@ -86,6 +89,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'matrix' | 'master' | 'staff' | 'venues' | 'analytics' | 'exports'>('matrix');
   const [selectedDate, setSelectedDate] = useState<string>('ALL');
+  const [matrixSearchQuery, setMatrixSearchQuery] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid');
@@ -823,6 +827,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* Live Instant Search Bar for Matrix */}
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className={`w-3.5 h-3.5 text-slate-400 absolute top-2.5 ${language === 'ar' ? 'right-3' : 'left-3'}`} />
+              <input
+                type="text"
+                value={matrixSearchQuery}
+                onChange={(e) => setMatrixSearchQuery(e.target.value)}
+                placeholder={language === 'ar' ? 'بحث سريع بالمادة، الدكتور، المعيد، القاعة...' : 'Filter course, doctor, TA, hall...'}
+                className={`w-full bg-slate-900 border border-slate-700/80 rounded-xl py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 ${language === 'ar' ? 'pr-9 pl-3' : 'pl-9 pr-3'}`}
+              />
+              {matrixSearchQuery && (
+                <button
+                  onClick={() => setMatrixSearchQuery('')}
+                  className={`absolute top-2 text-slate-500 hover:text-white ${language === 'ar' ? 'left-2.5' : 'right-2.5'}`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center space-x-4 space-x-reverse text-xs">
               <span className="flex items-center gap-1.5 text-slate-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> {language === 'ar' ? 'مكتمل التسكين' : 'Fully Staffed'}
@@ -843,6 +867,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   const isLab = c.venue_name.toLowerCase().includes('lab');
                   if (venueTypeFilter === 'LAB' && !isLab) return false;
                   if (venueTypeFilter === 'HALL' && isLab) return false;
+                  if (matrixSearchQuery.trim()) {
+                    const q = matrixSearchQuery.trim().toLowerCase();
+                    const matchCourse = c.course_code.toLowerCase().includes(q) || c.course_name.toLowerCase().includes(q);
+                    const matchVenue = c.venue_name.toLowerCase().includes(q);
+                    const matchProf = c.lead_professor?.full_name.toLowerCase().includes(q);
+                    const matchTA = c.tas.some(t => t.full_name.toLowerCase().includes(q));
+                    if (!matchCourse && !matchVenue && !matchProf && !matchTA) return false;
+                  }
                   return true;
                 });
 
@@ -915,14 +947,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
                               <div className="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
                                 <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{t('matrixLeadProf')}</div>
-                                <div className="font-semibold text-blue-300 truncate">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const prof = users.find((u) => u.id === cell.lead_professor?.id || u.staff_id === cell.lead_professor?.staff_id);
+                                    if (prof) setSelectedStaffForSchedule(prof);
+                                  }}
+                                  className="font-bold text-blue-300 hover:text-cyan-400 hover:underline truncate text-start block max-w-full"
+                                  title={language === 'ar' ? 'عرض جدول وموقع الدكتور الآن' : 'View doctor live schedule'}
+                                >
                                   {cell.lead_professor?.full_name || (language === 'ar' ? 'إشراف عام الكنترول' : 'General Control')}
-                                </div>
+                                </button>
                               </div>
                               <div className="p-2 rounded-xl bg-slate-900/90 border border-slate-800">
-                                <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{t('matrixAssistingTAs')} ({cell.tas.length})</div>
-                                <div className="font-semibold text-emerald-300 truncate">
-                                  {cell.tas.map((t) => t.full_name).join(', ') || (language === 'ar' ? 'قيد التوزيع' : 'Allocating...')}
+                                <div className="text-[10px] text-slate-400 font-bold uppercase mb-0.5 flex items-center justify-between">
+                                  <span>{t('matrixAssistingTAs')} ({cell.tas.length})</span>
+                                  <span className="text-[9px] text-slate-500 font-normal">
+                                    {language === 'ar' ? 'اضغط للتبديل' : 'click to swap'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {cell.tas.map((t) => {
+                                    const taUser = users.find((u) => u.id === t.id || u.staff_id === t.staff_id);
+                                    return (
+                                      <span
+                                        key={t.id}
+                                        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (taUser) setSelectedStaffForSchedule(taUser);
+                                          }}
+                                          className="hover:underline hover:text-white"
+                                          title={language === 'ar' ? 'عرض جدول وموقع المعيد الآن' : 'View TA live schedule'}
+                                        >
+                                          {t.full_name.split(' (')[0]}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const a = allAssignments.find(
+                                              (item) => item.exam_session_id === cell.session_id && item.user_id === t.id
+                                            );
+                                            if (a) setOverrideAssignment(a);
+                                          }}
+                                          className="text-slate-400 hover:text-cyan-400 transition"
+                                          title={language === 'ar' ? 'تبديل ببديل متاح اليوم' : 'Swap TA'}
+                                        >
+                                          <ArrowLeftRight className="w-2.5 h-2.5" />
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                  {cell.tas.length === 0 && (
+                                    <span className="text-amber-500/80 italic text-[10px]">
+                                      {language === 'ar' ? 'قيد التسكين' : 'Allocating...'}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -946,6 +1028,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   const isLab = cell.venue_name.toLowerCase().includes('lab');
                   if (venueTypeFilter === 'LAB' && !isLab) return null;
                   if (venueTypeFilter === 'HALL' && isLab) return null;
+
+                  if (matrixSearchQuery.trim()) {
+                    const q = matrixSearchQuery.trim().toLowerCase();
+                    const matchCourse = cell.course_code.toLowerCase().includes(q) || cell.course_name.toLowerCase().includes(q);
+                    const matchVenue = cell.venue_name.toLowerCase().includes(q);
+                    const matchProf = cell.lead_professor?.full_name.toLowerCase().includes(q);
+                    const matchTA = cell.tas.some((t) => t.full_name.toLowerCase().includes(q));
+                    if (!matchCourse && !matchVenue && !matchProf && !matchTA) return null;
+                  }
 
                   const examDetail = exams.find((e) => e.id === cell.session_id);
 
@@ -1023,10 +1114,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {t('matrixLeadProf')}
                             </div>
                             {cell.lead_professor ? (
-                              <div className="p-2 rounded-xl bg-blue-950/30 border border-blue-900/40 text-blue-200 flex items-center justify-between">
-                                <span className="font-semibold text-xs">{cell.lead_professor.full_name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prof = users.find((u) => u.id === cell.lead_professor?.id || u.staff_id === cell.lead_professor?.staff_id);
+                                  if (prof) setSelectedStaffForSchedule(prof);
+                                }}
+                                className="w-full text-start p-2 rounded-xl bg-blue-950/30 hover:bg-blue-900/40 border border-blue-900/40 text-blue-200 flex items-center justify-between transition"
+                                title={language === 'ar' ? 'عرض جدول وموقع الدكتور الآن' : 'View doctor live schedule'}
+                              >
+                                <span className="font-semibold text-xs hover:underline hover:text-cyan-300">{cell.lead_professor.full_name}</span>
                                 <span className="text-[10px] text-blue-400">{cell.lead_professor.department}</span>
-                              </div>
+                              </button>
                             ) : (
                               <div className="p-2 rounded-xl bg-slate-800/40 border border-slate-800 text-slate-400 text-xs">
                                 {language === 'ar' ? 'إشراف عام أستاذ المقرر' : 'General Course Oversight'}
@@ -1036,20 +1135,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                           {/* TAs */}
                           <div>
-                            <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">
-                              {t('matrixAssistingTAs')} ({cell.tas.length})
+                            <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center justify-between">
+                              <span>{t('matrixAssistingTAs')} ({cell.tas.length})</span>
+                              <span className="text-[9px] text-slate-500">{language === 'ar' ? 'اضغط للتبديل' : 'click to swap'}</span>
                             </div>
                             {cell.tas.length > 0 ? (
                               <div className="space-y-1">
-                                {cell.tas.map((ta) => (
-                                  <div
-                                    key={ta.id}
-                                    className="p-1.5 px-2.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-200 flex items-center justify-between text-[11px]"
-                                  >
-                                    <span className="font-medium">{ta.full_name}</span>
-                                    <span className="text-[10px] text-slate-400 font-mono">{ta.staff_id}</span>
-                                  </div>
-                                ))}
+                                {cell.tas.map((ta) => {
+                                  const taUser = users.find((u) => u.id === ta.id || u.staff_id === ta.staff_id);
+                                  return (
+                                    <div
+                                      key={ta.id}
+                                      className="p-1.5 px-2.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-200 flex items-center justify-between text-[11px]"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (taUser) setSelectedStaffForSchedule(taUser);
+                                        }}
+                                        className="font-medium hover:underline hover:text-cyan-300 text-start"
+                                        title={language === 'ar' ? 'عرض جدول وموقع المعيد الآن' : 'View TA live schedule'}
+                                      >
+                                        {ta.full_name}
+                                      </button>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const a = allAssignments.find(
+                                              (item) => item.exam_session_id === cell.session_id && item.user_id === ta.id
+                                            );
+                                            if (a) setOverrideAssignment(a);
+                                          }}
+                                          className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-cyan-400 transition"
+                                          title={language === 'ar' ? 'تبديل ببديل متاح اليوم' : 'Swap TA'}
+                                        >
+                                          <ArrowLeftRight className="w-3 h-3" />
+                                        </button>
+                                        <span className="text-[10px] text-slate-400 font-mono">{ta.staff_id}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">

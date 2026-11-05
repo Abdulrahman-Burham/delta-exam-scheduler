@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Radio,
   Search,
+  MessageCircle,
 } from 'lucide-react';
 
 interface StaffScheduleModalProps {
@@ -86,6 +87,23 @@ export const StaffScheduleModal: React.FC<StaffScheduleModalProps> = ({ user, on
     return acc + Math.max(0.75, diff);
   }, 0);
 
+  const handleShareWhatsApp = () => {
+    let text = `*جدول مراقبة الامتحانات - كلية الذكاء الاصطناعي (جامعة الدلتا)*\n`;
+    text += `👤 *الاسم:* ${user.full_name}\n`;
+    text += `📋 *إجمالي الفترات المكلف بها:* ${assignments.length} فترة\n`;
+    text += `──────────────────────\n`;
+    assignments.forEach((a, idx) => {
+      const s = a.exam_session;
+      text += `${idx + 1}) 📅 *${s.date}* | ⏰ ${s.start_time.slice(0, 5)} - ${s.end_time.slice(0, 5)}\n`;
+      text += `   🏛️ *المقر:* ${s.venue?.name || 'قاعات الكلية'}\n`;
+      text += `   📚 *المادة:* ${s.course_code} - ${s.course_name}\n`;
+      text += `   👥 *عدد الطلاب:* ${s.student_headcount} طالب\n\n`;
+    });
+    text += `──────────────────────\n`;
+    text += `🔗 المنظومة الإلكترونية: http://20.46.50.255`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -134,6 +152,16 @@ export const StaffScheduleModal: React.FC<StaffScheduleModalProps> = ({ user, on
           </div>
 
           <div className="flex items-center space-x-2 space-x-reverse">
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className="flex items-center space-x-1.5 space-x-reverse px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/20"
+              title={language === 'ar' ? 'مشاركة جدول المراقبة عبر واتساب' : 'Share Schedule on WhatsApp'}
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>{language === 'ar' ? 'واتساب' : 'WhatsApp'}</span>
+            </button>
+
             <a
               href={api.exports.getPersonalPdfUrl(user.id)}
               target="_blank"

@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   Table,
   ListOrdered,
+  MessageCircle,
 } from 'lucide-react';
 
 interface ProfessorDashboardProps {
@@ -73,6 +74,23 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
     } finally {
       setIsExportingImage(false);
     }
+  };
+
+  const handleShareWhatsApp = () => {
+    let text = `*جدول إشراف الامتحانات - كلية الذكاء الاصطناعي (جامعة الدلتا)*\n`;
+    text += `👤 *أستاذ المادة:* ${currentUser.full_name}\n`;
+    text += `📋 *إجمالي الفترات المكلف بها:* ${duties.length} فترة\n`;
+    text += `──────────────────────\n`;
+    duties.forEach((d, idx) => {
+      const s = d.exam_session;
+      text += `${idx + 1}) 📅 *${s.date}* | ⏰ ${s.start_time.slice(0, 5)} - ${s.end_time.slice(0, 5)}\n`;
+      text += `   🏛️ *المقر:* ${s.venue?.name || 'قاعات الكلية'}\n`;
+      text += `   📚 *المادة:* ${s.course_code} - ${s.course_name}\n`;
+      text += `   👥 *عدد الطلاب:* ${s.student_headcount} طالب\n\n`;
+    });
+    text += `──────────────────────\n`;
+    text += `🔗 المنظومة: http://20.46.50.255`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   // Helper date & time formatting
@@ -189,6 +207,15 @@ export const ProfessorDashboard: React.FC<ProfessorDashboardProps> = ({ currentU
 
           {/* Export Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={handleShareWhatsApp}
+              className="flex items-center space-x-2 space-x-reverse px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition"
+              title={language === 'ar' ? 'مشاركة جدول الإشراف عبر واتساب' : 'Share Schedule on WhatsApp'}
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>{language === 'ar' ? 'مشاركة واتساب' : 'WhatsApp'}</span>
+            </button>
+
             <a
               href={api.exports.getPersonalPdfUrl(currentUser.id)}
               target="_blank"
