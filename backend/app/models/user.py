@@ -28,6 +28,7 @@ class User(Base):
     title = Column(String(100), nullable=True)  # e.g., "Dean", "Vice Dean", "Professor", "Teaching Assistant"
     phone = Column(String(30), nullable=True)
     is_master_student = Column(Boolean, default=False, nullable=False)  # Enrolled in Master's (gets 2 days off)
+    max_days_per_week = Column(Integer, default=3, nullable=True)  # Attendance days cap per week
     max_daily_shifts = Column(Integer, default=2, nullable=False)
     max_total_shifts = Column(Integer, default=6, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

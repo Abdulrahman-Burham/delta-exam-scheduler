@@ -14,6 +14,7 @@ class UserBase(BaseModel):
     title: Optional[str] = None
     phone: Optional[str] = None
     is_master_student: bool = False
+    max_days_per_week: Optional[int] = 3
     max_daily_shifts: int = 2
     max_total_shifts: int = 6
     is_active: bool = True
@@ -30,6 +31,7 @@ class UserUpdate(BaseModel):
     title: Optional[str] = None
     phone: Optional[str] = None
     is_master_student: Optional[bool] = None
+    max_days_per_week: Optional[int] = None
     max_daily_shifts: Optional[int] = None
     max_total_shifts: Optional[int] = None
     is_active: Optional[bool] = None

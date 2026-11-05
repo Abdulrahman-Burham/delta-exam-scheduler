@@ -70,4 +70,6 @@ deploy_delta.zip
 Caddyfile.test
 egm_repo/
 .agents/
+scratch/
+
 

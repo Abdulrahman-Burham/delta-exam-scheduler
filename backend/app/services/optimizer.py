@@ -114,41 +114,46 @@ class InvigilationOptimizer:
                 sum(ta_vars[(t.id, s.id)] for t in self.tas) == s.required_tas
             )
 
-        # 2. Prevent Double Booking / Overlapping Time Slots
-        for i in range(len(self.sessions)):
-            for j in range(i + 1, len(self.sessions)):
-                s1 = self.sessions[i]
-                s2 = self.sessions[j]
-                if self._is_time_overlap(s1.date, s1.start_time, s1.end_time,
-                                         s2.date, s2.start_time, s2.end_time):
-                    # No professor can attend both
-                    for p in self.professors:
-                        model.Add(prof_vars[(p.id, s1.id)] + prof_vars[(p.id, s2.id)] <= 1)
-                    # No TA can attend both
-                    for t in self.tas:
-                        model.Add(ta_vars[(t.id, s1.id)] + ta_vars[(t.id, s2.id)] <= 1)
-
-        # 3. Availability Blackout Constraints
-        for s in self.sessions:
-            for p in self.professors:
-                if self._is_user_unavailable(p, s):
-                    model.Add(prof_vars[(p.id, s.id)] == 0)
-            for t in self.tas:
-                if self._is_user_unavailable(t, s):
-                    model.Add(ta_vars[(t.id, s.id)] == 0)
-
-        # 4. Workload Caps (Daily and Total)
-        # Group sessions by date
+        # 2. Prevent Double Booking / Overlapping Time Slots (Clique Formulation)
         sessions_by_date: Dict[date, List[ExamSession]] = {}
         for s in self.sessions:
             sessions_by_date.setdefault(s.date, []).append(s)
 
+        for d, d_sessions in sessions_by_date.items():
+            if len(d_sessions) <= 1:
+                continue
+            time_points = sorted(list(set([s.start_time for s in d_sessions] + [s.end_time for s in d_sessions])))
+            for idx in range(len(time_points) - 1):
+                tp_start = time_points[idx]
+                tp_end = time_points[idx + 1]
+                overlapping = [s for s in d_sessions if s.start_time <= tp_start and s.end_time >= tp_end]
+                if len(overlapping) > 1:
+                    for p in self.professors:
+                        model.Add(sum(prof_vars[(p.id, s.id)] for s in overlapping) <= 1)
+                    for t in self.tas:
+                        model.Add(sum(ta_vars[(t.id, s.id)] for s in overlapping) <= 1)
+
+        # 3. Availability Blackout Constraints
+        for c in self.constraints:
+            if c.constraint_type == ConstraintTypeEnum.UNAVAILABLE:
+                for s in self.sessions:
+                    if s.date == c.date:
+                        is_overlap = (
+                            c.start_time is None
+                            or c.end_time is None
+                            or max(s.start_time, c.start_time) < min(s.end_time, c.end_time)
+                        )
+                        if is_overlap:
+                            if (c.user_id, s.id) in prof_vars:
+                                model.Add(prof_vars[(c.user_id, s.id)] == 0)
+                            if (c.user_id, s.id) in ta_vars:
+                                model.Add(ta_vars[(c.user_id, s.id)] == 0)
+
+        # 4. Workload Caps (Daily and Total)
         for p in self.professors:
             eff_max_total_p = p.max_total_shifts if p.max_total_shifts is not None else 15
-            eff_max_daily_p = p.max_daily_shifts if p.max_daily_shifts is not None else 2
-            # Total max shifts
+            eff_max_daily_p = p.max_daily_shifts if p.max_daily_shifts is not None else 3
             model.Add(sum(prof_vars[(p.id, s.id)] for s in self.sessions) <= eff_max_total_p)
-            # Daily max shifts
             for d, d_sessions in sessions_by_date.items():
                 model.Add(sum(prof_vars[(p.id, s.id)] for s in d_sessions) <= eff_max_daily_p)
 
@@ -156,17 +161,13 @@ class InvigilationOptimizer:
         avg_ta_shifts = total_ta_demand / max(1, len(self.tas))
 
         for t in self.tas:
-            # Resilient shift caps ensuring feasibility under variable proctor requirements (2 TAs for labs, 3-4 for halls)
             eff_max_total = max(t.max_total_shifts or 25, int(math.ceil(avg_ta_shifts * 1.4)))
-            eff_max_daily = max(t.max_daily_shifts or 3, 3)
-            # Total max shifts
+            eff_max_daily = max(t.max_daily_shifts or 4, 4)
             model.Add(sum(ta_vars[(t.id, s.id)] for s in self.sessions) <= eff_max_total)
-            # Daily max shifts
             for d, d_sessions in sessions_by_date.items():
                 model.Add(sum(ta_vars[(t.id, s.id)] for s in d_sessions) <= eff_max_daily)
 
-        # 5. Weekly Presence & Mandatory Days Off Constraints (TAs and Doctors are NOT present all week!)
-        # Group exam dates into Academic Weeks (Saturday through Friday)
+        # 5. Staff Attendance & Weekly Days Cap with Shift Compaction
         all_dates_sorted = sorted(list(sessions_by_date.keys()))
         min_exam_date = all_dates_sorted[0] if all_dates_sorted else None
         academic_weeks: Dict[int, List[date]] = defaultdict(list)
@@ -174,44 +175,68 @@ class InvigilationOptimizer:
             week_idx = (d - min_exam_date).days // 7 if min_exam_date else 0
             academic_weeks[week_idx].append(d)
 
-        # A) Teaching Assistants (TAs):
-        # - Regular TAs: Max 4 days per week (minimum 2 days off per week)
-        # - Master's TAs: Max 3 days per week (minimum 3 days off per week for research & thesis)
+        ta_day_active: Dict[Tuple[str, date], cp_model.IntVar] = {}
+        compaction_penalties = []
+
+        # Teaching Assistants Attendance Caps & Compaction
         for t in self.tas:
             is_master = getattr(t, "is_master_student", False)
-            for w_idx, w_dates in academic_weeks.items():
-                if len(w_dates) <= 2:
-                    continue
-                # Week 1: Max 4 days for Master TAs (2 days off), Max 5 for Regular (1-2 days off)
-                # Week 2: Max 2 days for Master TAs (4 days off), Max 3 for Regular (3 days off)
-                max_w_days = (4 if is_master else 5) if w_idx == 0 else (2 if is_master else 3)
-                w_indicators = []
-                for d in w_dates:
-                    d_sessions = sessions_by_date[d]
-                    w = model.NewBoolVar(f"works_day_ta_{t.id}_{d}")
-                    w_indicators.append(w)
-                    eff_daily = max(t.max_daily_shifts or 3, 3)
-                    model.Add(sum(ta_vars[(t.id, s.id)] for s in d_sessions) <= eff_daily * w)
-                    for s in d_sessions:
-                        model.Add(w >= ta_vars[(t.id, s.id)])
-                model.Add(sum(w_indicators) <= min(max_w_days, len(w_dates)))
+            user_max_days = getattr(t, "max_days_per_week", None)
+            eff_daily = max(t.max_daily_shifts or 4, 4)
 
-        # B) Doctors (Professors):
-        # - Doctors attend at most 3 days per week (not all week!)
-        for p in self.professors:
+            for d, d_sessions in sessions_by_date.items():
+                w = model.NewBoolVar(f"ta_act_{t.id}_{d}")
+                ta_day_active[(t.id, d)] = w
+                shifts_d = sum(ta_vars[(t.id, s.id)] for s in d_sessions)
+                model.Add(shifts_d <= eff_daily * w)
+                for s in d_sessions:
+                    model.Add(w >= ta_vars[(t.id, s.id)])
+
+                # Shift Compaction: Strongly penalize isolated 1-shift attendance on multi-session days
+                if len(d_sessions) >= 2:
+                    iso = model.NewBoolVar(f"ta_iso_{t.id}_{d}")
+                    model.Add(shifts_d >= 2 * w - iso)
+                    compaction_penalties.append(iso * 20)
+
+            # Weekly Cap: hard constraint sum(day_active) <= max_days
             for w_idx, w_dates in academic_weeks.items():
-                if len(w_dates) <= 2:
-                    continue
-                w_indicators = []
-                for d in w_dates:
-                    d_sessions = sessions_by_date[d]
-                    w = model.NewBoolVar(f"works_day_prof_{p.id}_{d}")
-                    w_indicators.append(w)
-                    eff_daily = max(p.max_daily_shifts or 2, 2)
-                    model.Add(sum(prof_vars[(p.id, s.id)] for s in d_sessions) <= eff_daily * w)
-                    for s in d_sessions:
-                        model.Add(w >= prof_vars[(p.id, s.id)])
-                model.Add(sum(w_indicators) <= min(3, len(w_dates)))
+                if w_idx == 0:
+                    # Week 1 (6 days, 656 shifts): Master's TAs max 3 days, Regular TAs max 4 days
+                    max_w_days = 3 if is_master else 4
+                elif w_idx == 1:
+                    # Week 2 (6 days, 315 shifts): Master's TAs max 2 days, Regular TAs max 3 days
+                    max_w_days = 2 if is_master else 3
+                else:
+                    max_w_days = min(1, len(w_dates))
+                model.Add(sum(ta_day_active[(t.id, d)] for d in w_dates) <= max_w_days)
+
+        # Doctors Attendance Caps & Compaction
+        prof_day_active: Dict[Tuple[str, date], cp_model.IntVar] = {}
+        for p in self.professors:
+            eff_daily = max(p.max_daily_shifts or 3, 3)
+            user_max_days = getattr(p, "max_days_per_week", None)
+
+            for d, d_sessions in sessions_by_date.items():
+                w = model.NewBoolVar(f"prof_act_{p.id}_{d}")
+                prof_day_active[(p.id, d)] = w
+                shifts_d = sum(prof_vars[(p.id, s.id)] for s in d_sessions)
+                model.Add(shifts_d <= eff_daily * w)
+                for s in d_sessions:
+                    model.Add(w >= prof_vars[(p.id, s.id)])
+
+                if len(d_sessions) >= 2:
+                    iso = model.NewBoolVar(f"prof_iso_{p.id}_{d}")
+                    model.Add(shifts_d >= 2 * w - iso)
+                    compaction_penalties.append(iso * 20)
+
+            for w_idx, w_dates in academic_weeks.items():
+                if user_max_days and user_max_days > 0:
+                    max_w_days = min(user_max_days, len(w_dates))
+                elif len(w_dates) >= 5:
+                    max_w_days = 3
+                else:
+                    max_w_days = min(2, len(w_dates))
+                model.Add(sum(prof_day_active[(p.id, d)] for d in w_dates) <= max_w_days)
 
         # 6. Honor Existing Locked Assignments
         if self.config.honor_existing_locks and self.existing_locked:
@@ -225,7 +250,7 @@ class InvigilationOptimizer:
                             model.Add(ta_vars[(assignment.user_id, assignment.exam_session_id)] == 1)
 
         # ----------------- SOFT CONSTRAINTS / OBJECTIVE -----------------
-        objective_terms = []
+        objective_terms = list(compaction_penalties)
 
         # 1. Workload Balance (Fair Distribution among TAs and Professors)
         total_ta_demand = sum(s.required_tas for s in self.sessions)
@@ -248,33 +273,16 @@ class InvigilationOptimizer:
             model.Add(dev >= avg_prof_shifts - prof_total)
             objective_terms.append(dev * self.config.workload_balance_weight)
 
-        # 2. Rest Intervals / Minimize Back-to-Back Shifts
-        if self.config.rest_interval_weight > 0:
-            for d, d_sessions in sessions_by_date.items():
-                for i in range(len(d_sessions)):
-                    for j in range(len(d_sessions)):
-                        if i == j:
-                            continue
-                        s1 = d_sessions[i]
-                        s2 = d_sessions[j]
-                        if self._is_consecutive(s1.date, s1.end_time, s2.date, s2.start_time):
-                            for t in self.tas:
-                                b_ta = model.NewBoolVar(f"consec_ta_{t.id}_{s1.id}_{s2.id}")
-                                model.Add(b_ta >= ta_vars[(t.id, s1.id)] + ta_vars[(t.id, s2.id)] - 1)
-                                objective_terms.append(b_ta * self.config.rest_interval_weight)
-                            for p in self.professors:
-                                b_prof = model.NewBoolVar(f"consec_prof_{p.id}_{s1.id}_{s2.id}")
-                                model.Add(b_prof >= prof_vars[(p.id, s1.id)] + prof_vars[(p.id, s2.id)] - 1)
-                                objective_terms.append(b_prof * self.config.rest_interval_weight)
-
-        # 3. Building Proximity Optimization (Minimize Running Across Campus)
+        # 2. Shift Proximity & Cross-Building Minimization
+        # Grouped/consecutive shifts on the same day are encouraged for compaction.
+        # Only penalize when consecutive shifts require running between different buildings.
         if self.config.building_proximity_weight > 0:
             for d, d_sessions in sessions_by_date.items():
-                for i in range(len(d_sessions)):
-                    for j in range(i + 1, len(d_sessions)):
-                        s1 = d_sessions[i]
-                        s2 = d_sessions[j]
-                        # Building proximity matters particularly for consecutive shifts on the same day
+                sorted_d_sessions = sorted(d_sessions, key=lambda s: s.start_time)
+                for i in range(len(sorted_d_sessions) - 1):
+                    s1 = sorted_d_sessions[i]
+                    for j in range(i + 1, min(i + 8, len(sorted_d_sessions))):
+                        s2 = sorted_d_sessions[j]
                         if not self._is_consecutive(s1.date, s1.end_time, s2.date, s2.start_time):
                             continue
                         v1 = self.venues.get(s1.venue_id)
@@ -283,11 +291,11 @@ class InvigilationOptimizer:
                             for t in self.tas:
                                 cross_ta = model.NewBoolVar(f"cross_ta_{t.id}_{s1.id}_{s2.id}")
                                 model.Add(cross_ta >= ta_vars[(t.id, s1.id)] + ta_vars[(t.id, s2.id)] - 1)
-                                objective_terms.append(cross_ta * self.config.building_proximity_weight)
+                                objective_terms.append(cross_ta * (self.config.building_proximity_weight // 2))
                             for p in self.professors:
                                 cross_prof = model.NewBoolVar(f"cross_prof_{p.id}_{s1.id}_{s2.id}")
                                 model.Add(cross_prof >= prof_vars[(p.id, s1.id)] + prof_vars[(p.id, s2.id)] - 1)
-                                objective_terms.append(cross_prof * self.config.building_proximity_weight)
+                                objective_terms.append(cross_prof * (self.config.building_proximity_weight // 2))
 
         # 4. Department Match Preference (Reward or minimize non-match)
         if self.config.department_match_weight > 0:
@@ -304,7 +312,7 @@ class InvigilationOptimizer:
 
         # Solve Model
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 15.0
+        solver.parameters.max_time_in_seconds = 25.0
         solver.parameters.num_workers = 4
         solver_status = solver.Solve(model)
         solve_time_ms = round((time.time() - start_time) * 1000, 2)
@@ -588,6 +596,20 @@ class InvigilationOptimizer:
         total_required_assignments = sum(s.required_professors + s.required_tas for s in self.sessions)
         coverage_rate = round((len(assignments) / max(1, total_required_assignments)) * 100.0, 1)
 
+        # Compute attendance presence metrics and compaction rate
+        session_dates = {s.id: s.date for s in self.sessions}
+        user_attended_dates: Dict[str, set] = defaultdict(set)
+        user_date_shifts: Dict[Tuple[str, date], int] = defaultdict(int)
+        for a in assignments:
+            s_date = session_dates.get(a["exam_session_id"])
+            if s_date:
+                user_attended_dates[a["user_id"]].add(s_date)
+                user_date_shifts[(a["user_id"], s_date)] += 1
+
+        total_person_days = len(user_date_shifts)
+        compacted_person_days = sum(1 for shifts in user_date_shifts.values() if shifts >= 2)
+        compaction_rate = round((compacted_person_days / max(1, total_person_days)) * 100.0, 1)
+
         return {
             "total_assignments": len(assignments),
             "coverage_rate": min(100.0, coverage_rate),
@@ -595,4 +617,7 @@ class InvigilationOptimizer:
             "avg_ta_shifts": round(avg_ta, 2),
             "avg_prof_shifts": round(avg_prof, 2),
             "ta_shift_variance": round(sum((x - avg_ta) ** 2 for x in ta_counts) / max(1, len(ta_counts)), 2),
+            "total_person_days": total_person_days,
+            "compaction_rate": compaction_rate,
+            "avg_attendance_days": round(sum(len(d) for d in user_attended_dates.values()) / max(1, len(self.users)), 1),
         }
