@@ -119,6 +119,7 @@ def export_personal_pdf(
 
 
 @router.get("/ics/{user_id}")
+@router.get("/ical/{user_id}")
 def export_personal_calendar_ics(
     user_id: str,
     db: Session = Depends(get_db),
