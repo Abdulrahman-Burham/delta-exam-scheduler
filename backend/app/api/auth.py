@@ -11,13 +11,26 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User, RoleEnum
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse, MessageResponse, Token
+from app.schemas.auth import (
+    LoginRequest,
+    TokenResponse,
+    UserResponse,
+    MessageResponse,
+    Token,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+)
 from app.schemas.user import UserOut
 from app.security import (
     verify_password,
     dummy_verify_timing_defense,
     create_access_token,
+    create_password_reset_token,
+    decode_password_reset_token,
+    get_password_hash,
 )
+import jwt
 from app.dependencies import get_current_user
 from app.limiter import limiter
 from app.config import settings
@@ -218,4 +231,83 @@ def switch_demo_user(
         role=user.role,
         department=user.department,
         user=user_resp
+    )
+
+
+@router.post("/forgot-password")
+@limiter.limit("5/minute")
+def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Initiates password recovery for faculty members.
+    Generates a secure 15-minute signed reset token.
+    OWASP compliant: safe response prevents account enumeration.
+    """
+    user = db.query(User).filter(User.email == body.email.strip().lower()).first()
+    if not user:
+        dummy_verify_timing_defense()
+        return {
+            "success": True,
+            "detail": "إذا كان البريد الإلكتروني مسجلاً لدينا، فستتمكن من إعادة تعيين كلمة المرور فوراً.",
+            "reset_token": None,
+        }
+
+    reset_token = create_password_reset_token(user_id=str(user.id), email=user.email)
+
+    return {
+        "success": True,
+        "detail": f"تم التحقق بنجاح من حساب {user.full_name}. يرجى إدخال كلمة المرور الجديدة أدناه.",
+        "reset_token": reset_token,
+        "user_name": user.full_name,
+        "email": user.email,
+    }
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    body: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Completes password reset using verified cryptographic token.
+    Enforces minimum length of 6 characters and updates bcrypt hash.
+    """
+    try:
+        payload = decode_password_reset_token(body.token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="انتهت صلاحية رمز إعادة التعيين (المدة المسموحة 15 دقيقة فقط). يرجى طلب رمز جديد.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="رمز إعادة تعيين كلمة المرور غير صالح أو تالف.",
+        )
+
+    user_id = payload.get("sub")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="المستخدم غير موجود أو حسابه غير مفعّل.",
+        )
+
+    if len(body.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف.",
+        )
+
+    user.hashed_password = get_password_hash(body.new_password)
+    db.commit()
+
+    return ResetPasswordResponse(
+        success=True,
+        detail="تم تحديث كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة."
     )

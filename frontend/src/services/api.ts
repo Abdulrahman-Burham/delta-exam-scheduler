@@ -94,6 +94,31 @@ export const api = {
         user?: User;
       }>(res);
     },
+    forgotPassword: async (email: string) => {
+      const res = await secureFetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      return handleResponse<{
+        success: boolean;
+        detail: string;
+        reset_token?: string;
+        user_name?: string;
+        email?: string;
+      }>(res);
+    },
+    resetPassword: async (token: string, newPassword: string) => {
+      const res = await secureFetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, new_password: newPassword }),
+      });
+      return handleResponse<{
+        success: boolean;
+        detail: string;
+      }>(res);
+    },
   },
 
   // Admin Specific Endpoints (/api/admin/*)

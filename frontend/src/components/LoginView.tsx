@@ -17,6 +17,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../services/api';
 import { User } from '../types';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
@@ -30,6 +31,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const quickPersonas = [
     {
@@ -197,9 +199,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                {language === 'ar' ? 'كلمة المرور' : 'Password'}
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  {language === 'ar' ? 'كلمة المرور' : 'Password'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition"
+                >
+                  {language === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot Password?'}
+                </button>
+              </div>
               <div className="relative">
                 <Lock className={`w-4 h-4 text-slate-500 absolute top-3.5 ${isRtl ? 'right-3.5' : 'left-3.5'}`} />
                 <input
@@ -290,6 +301,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
       </div>
+
+      {showForgotPassword && (
+        <ForgotPasswordModal
+          onClose={() => setShowForgotPassword(false)}
+          onSuccess={(newPass, userEmail) => {
+            setPassword(newPass);
+            if (userEmail) setEmail(userEmail);
+            toast.success(
+              language === 'ar' ? 'تم تحديث كلمة المرور' : 'Password Updated',
+              language === 'ar' ? 'تم تعبئة كلمة المرور الجديدة تلقائياً' : 'Your new password has been populated'
+            );
+          }}
+        />
+      )}
     </div>
   );
 };

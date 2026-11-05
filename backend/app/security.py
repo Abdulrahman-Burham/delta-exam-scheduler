@@ -110,3 +110,40 @@ def decode_access_token(token: str) -> Dict[str, Any]:
             "verify_iat": True,
         }
     )
+
+
+def create_password_reset_token(user_id: str, email: str, expires_minutes: int = 15) -> str:
+    """
+    Generates a cryptographically signed password reset token.
+    Claims: sub, email, purpose='password_reset', iat, exp (15 minutes).
+    """
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=expires_minutes)
+
+    payload: Dict[str, Any] = {
+        "sub": str(user_id),
+        "email": str(email).lower(),
+        "purpose": "password_reset",
+        "iat": int(now.timestamp()),
+        "exp": int(expires_at.timestamp()),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> Dict[str, Any]:
+    """
+    Decodes and validates a password reset token.
+    Enforces signature, expiration, and purpose == 'password_reset'.
+    """
+    payload = jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+        options={
+            "require": ["sub", "email", "purpose", "exp"],
+            "verify_exp": True,
+        }
+    )
+    if payload.get("purpose") != "password_reset":
+        raise jwt.InvalidTokenError("Token is not valid for password reset")
+    return payload

@@ -68,6 +68,35 @@ class MessageResponse(BaseModel):
     detail: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def sanitize_email(cls, v: str) -> str:
+        clean = v.strip().lower()
+        if not clean:
+            raise ValueError("Email cannot be empty")
+        return clean
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10, description="Password reset verification token")
+    new_password: str = Field(..., min_length=6, max_length=128, description="New strong password")
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Password cannot be blank")
+        return v
+
+
+class ResetPasswordResponse(BaseModel):
+    success: bool
+    detail: str
+
+
 # Backward compatibility schemas
 class Token(BaseModel):
     access_token: str
