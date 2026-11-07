@@ -25,6 +25,7 @@ import {
   Search,
   CheckCheck,
   Printer,
+  ScanLine,
 } from 'lucide-react';
 
 interface VenueScheduleModalProps {
@@ -59,6 +60,8 @@ export const VenueScheduleModal: React.FC<VenueScheduleModalProps> = ({ venue, o
   const [rosterData, setRosterData] = useState<VenueRoster | null>(null);
   const [studentSearch, setStudentSearch] = useState<string>('');
   const [isUpdatingAttendance, setIsUpdatingAttendance] = useState<boolean>(false);
+  const [quickCheckinCode, setQuickCheckinCode] = useState<string>('');
+  const [isCheckingIn, setIsCheckingIn] = useState<boolean>(false);
 
   const fetchRoster = async () => {
     setRosterLoading(true);
@@ -114,6 +117,36 @@ export const VenueScheduleModal: React.FC<VenueScheduleModalProps> = ({ venue, o
       // non-blocking
     } finally {
       setIsUpdatingAttendance(false);
+    }
+  };
+
+  const handleQuickCheckin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCheckinCode.trim() || isCheckingIn) return;
+    setIsCheckingIn(true);
+    const code = quickCheckinCode.trim();
+    try {
+      const res = await api.students.quickCheckin(venue.name, code);
+      toast.success(
+        language === 'ar' ? 'تم تسجيل الحضور بنجاح' : 'Check-in Verified',
+        res.message || `${res.full_name} (مقعد #${res.seat_number})`
+      );
+      setQuickCheckinCode('');
+      if (rosterData) {
+        const updated = rosterData.students.map((s) =>
+          s.student?.student_code === res.student_code ? { ...s, attendance_status: 'PRESENT' as const } : s
+        );
+        const pres = updated.filter((s) => s.attendance_status === 'PRESENT').length;
+        const abs = updated.filter((s) => s.attendance_status === 'ABSENT').length;
+        setRosterData({ ...rosterData, students: updated, present_count: pres, absent_count: abs });
+      }
+    } catch (err: any) {
+      toast.warning(
+        language === 'ar' ? 'تنبيه مقر أو كود' : 'Check-in Warning',
+        err.message || 'الطالب غير مسجل بهذا المقر'
+      );
+    } finally {
+      setIsCheckingIn(false);
     }
   };
 
@@ -925,6 +958,28 @@ export const VenueScheduleModal: React.FC<VenueScheduleModalProps> = ({ venue, o
                       </div>
                     </div>
                   </div>
+
+                  {/* Quick Barcode Check-in Bar */}
+                  <form onSubmit={handleQuickCheckin} className="flex flex-col sm:flex-row items-center gap-2.5 p-3 rounded-2xl bg-cyan-950/25 border border-cyan-500/35 shadow-lg">
+                    <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold shrink-0">
+                      <ScanLine className="w-4 h-4 text-cyan-400 animate-pulse" />
+                      <span>{language === 'ar' ? 'التحضير السريع (قارئ الباركود أو الكود):' : 'Quick Check-in (Barcode / ID):'}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={quickCheckinCode}
+                      onChange={(e) => setQuickCheckinCode(e.target.value)}
+                      placeholder={language === 'ar' ? 'وجّه قارئ الباركود أو اكتب كود الطالب واضغط Enter...' : 'Scan student barcode or type ID & hit Enter...'}
+                      className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-400 outline-none font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!quickCheckinCode.trim() || isCheckingIn}
+                      className="w-full sm:w-auto px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition disabled:opacity-50 shrink-0 shadow-md shadow-cyan-600/20"
+                    >
+                      {isCheckingIn ? '...' : (language === 'ar' ? 'تسجيل فوري' : 'Check In')}
+                    </button>
+                  </form>
 
                   {/* Search + Actions */}
                   <div className="flex flex-col sm:flex-row items-center gap-3">

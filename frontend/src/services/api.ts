@@ -382,5 +382,27 @@ export const api = {
       const res = await secureFetch(`${API_BASE}/students/analytics`);
       return handleResponse<any>(res);
     },
+    getCalendarIcsUrl: (code: string) => {
+      return `${API_BASE}/students/calendar.ics?code=${encodeURIComponent(code)}`;
+    },
+    getMasterCsvUrl: () => {
+      return `${API_BASE}/students/export-csv`;
+    },
+    quickCheckin: async (venueName: string, studentCode: string) => {
+      const res = await secureFetch(`${API_BASE}/students/quick-checkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venue_name: venueName, student_code: studentCode }),
+      });
+      return handleResponse<{
+        success: boolean;
+        student_code: string;
+        full_name: string;
+        seat_number: number;
+        venue_name: string;
+        course_name: string;
+        message: string;
+      }>(res);
+    },
   },
 };

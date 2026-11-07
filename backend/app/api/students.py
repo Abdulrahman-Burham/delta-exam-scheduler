@@ -317,3 +317,142 @@ def export_roster_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/calendar.ics")
+def export_student_calendar(
+    code: str = Query(..., description="Student University ID / Code"),
+    db: Session = Depends(get_db),
+):
+    """Download standard RFC 5545 iCalendar (.ics) file for student personal schedule."""
+    clean_code = code.strip()
+    student = db.query(Student).filter(Student.student_code == clean_code).first()
+    if not student:
+        student = db.query(Student).filter(Student.full_name.ilike(f"%{clean_code}%")).first()
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    seatings = (
+        db.query(StudentSeating)
+        .filter(StudentSeating.student_id == student.id)
+        .order_by(StudentSeating.exam_date.asc(), StudentSeating.start_time.asc())
+        .all()
+    )
+
+    ics_content = ExportService.generate_student_ical(student, seatings)
+    filename = f"Exam_Schedule_{student.student_code}.ics"
+    return Response(
+        content=ics_content,
+        media_type="text/calendar",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export-csv")
+def export_master_seatings_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export complete master exam seating allocations as UTF-8 BOM CSV for Excel."""
+    import csv
+    output = io.StringIO()
+    # Write UTF-8 BOM so Excel opens Arabic correctly
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow([
+        "م",
+        "كود الطالب",
+        "اسم الطالب",
+        "القسم الأكاديمي",
+        "اسم المقرر",
+        "المقر / المعمل",
+        "رقم المقعد",
+        "تاريخ الامتحان",
+        "وقت البداية",
+        "وقت النهاية",
+        "حالة الحضور",
+    ])
+
+    seatings = (
+        db.query(StudentSeating)
+        .join(Student)
+        .order_by(StudentSeating.exam_date.asc(), StudentSeating.venue_name.asc(), StudentSeating.seat_number.asc())
+        .all()
+    )
+
+    for idx, s in enumerate(seatings, start=1):
+        writer.writerow([
+            idx,
+            s.student.student_code,
+            s.student.full_name,
+            s.department or s.student.department,
+            s.course_name,
+            s.venue_name,
+            s.seat_number or "",
+            s.exam_date.strftime("%Y-%m-%d") if s.exam_date else "",
+            s.start_time.strftime("%I:%M %p") if s.start_time else "",
+            s.end_time.strftime("%I:%M %p") if s.end_time else "",
+            s.attendance_status,
+        ])
+
+    csv_data = output.getvalue()
+    filename = f"Delta_Faculty_Master_Student_Seatings_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_data.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+from pydantic import BaseModel
+
+class QuickCheckinRequest(BaseModel):
+    venue_name: str
+    student_code: str
+
+
+@router.post("/quick-checkin")
+def quick_student_checkin(
+    payload: QuickCheckinRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Quick barcode or keyboard check-in for a student entering a specific venue."""
+    clean_code = payload.student_code.strip()
+    student = db.query(Student).filter(Student.student_code == clean_code).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"كود الطالب '{clean_code}' غير موجود بسجلات الكلية.")
+
+    clean_venue = payload.venue_name.strip().lower()
+    seatings = db.query(StudentSeating).filter(StudentSeating.student_id == student.id).all()
+
+    target_seating = None
+    for s in seatings:
+        if clean_venue in s.venue_name.lower() or s.venue_name.lower() in clean_venue:
+            target_seating = s
+            break
+
+    if not target_seating:
+        assigned_halls = ", ".join([s.venue_name for s in seatings]) if seatings else "غير محدد"
+        raise HTTPException(
+            status_code=400,
+            detail=f"الطالب '{student.full_name}' ليس لديه امتحان في هذا المقر ({payload.venue_name})! مقره المحدد: {assigned_halls}",
+        )
+
+    now = datetime.utcnow()
+    target_seating.attendance_status = "PRESENT"
+    target_seating.marked_by_user_id = current_user.id
+    target_seating.attended_at = now
+    db.commit()
+
+    return {
+        "success": True,
+        "student_code": student.student_code,
+        "full_name": student.full_name,
+        "seat_number": target_seating.seat_number,
+        "venue_name": target_seating.venue_name,
+        "course_name": target_seating.course_name,
+        "attendance_status": "PRESENT",
+        "message": f"تم تأكيد حضور: {student.full_name} (مقعد رقم {target_seating.seat_number}) بنجاح.",
+    }

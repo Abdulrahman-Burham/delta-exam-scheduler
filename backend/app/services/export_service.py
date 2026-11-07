@@ -457,6 +457,54 @@ class ExportService:
         return "\r\n".join(lines)
 
     @staticmethod
+    def generate_student_ical(student, seatings: list) -> str:
+        """Generates standard iCalendar (.ics) format string for student personal exam schedule."""
+        lines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//Delta University Faculty Exam Scheduler//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            f"X-WR-CALNAME:Exam Timetable - {student.full_name}",
+        ]
+
+        for s in seatings:
+            if not s.exam_date or not s.start_time:
+                continue
+            end_t = s.end_time or s.start_time
+            dt_start = f"{s.exam_date.strftime('%Y%m%d')}T{s.start_time.strftime('%H%M%S')}"
+            dt_end = f"{s.exam_date.strftime('%Y%m%d')}T{end_t.strftime('%H%M%S')}"
+            summary = f"Exam: {s.course_name} ({s.venue_name})"
+            description = (
+                f"Course: {s.course_name}\\n"
+                f"Venue: {s.venue_name}\\n"
+                f"Seat Number: {s.seat_number or 'Unspecified'}\\n"
+                f"Student ID: {student.student_code}\\n"
+                f"Student Name: {student.full_name}\\n"
+                f"Department: {student.department}"
+            )
+            lines.extend([
+                "BEGIN:VEVENT",
+                f"UID:student-exam-{s.id}-{student.student_code}@deltauniv.edu.eg",
+                f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+                f"DTSTART:{dt_start}",
+                f"DTEND:{dt_end}",
+                f"SUMMARY:{summary}",
+                f"DESCRIPTION:{description}",
+                f"LOCATION:{s.venue_name}",
+                "STATUS:CONFIRMED",
+                "BEGIN:VALARM",
+                "TRIGGER:-PT60M",
+                "ACTION:DISPLAY",
+                f"DESCRIPTION:Exam reminder: {s.course_name} in {s.venue_name} (Seat #{s.seat_number or ''})",
+                "END:VALARM",
+                "END:VEVENT"
+            ])
+
+        lines.append("END:VCALENDAR")
+        return "\r\n".join(lines)
+
+    @staticmethod
     def generate_roster_pdf(
         venue_name: str,
         course_name: str,

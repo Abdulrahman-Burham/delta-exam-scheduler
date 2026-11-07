@@ -1781,7 +1781,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <p className="text-xs text-slate-400">{t('exportsSubtitle')}</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-4">
               <div>
                 <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
@@ -1838,6 +1838,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="w-full text-center py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white transition shadow-lg shadow-emerald-600/20"
               >
                 {t('exportCsvBtn')}
+              </a>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-4">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  {language === 'ar' ? 'كشف مقاعد الطلاب واللجان الإجمالي' : 'Master Student Seatings CSV'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {language === 'ar'
+                    ? 'تصدير جدول الإكسيل الشامل لجميع الطلاب (2,680 طالب) بكافة مقاعدهم وتوزيع لجانهم بصيغة UTF-8 المتوافقة مع Excel.'
+                    : 'Download complete master CSV sheet with all 2,680 students and their exam seating allocations.'}
+                </p>
+              </div>
+              <a
+                href={api.students.getMasterCsvUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full text-center py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 font-bold text-xs text-white transition shadow-lg shadow-amber-600/20"
+              >
+                {language === 'ar' ? 'تحميل كشف المقاعد (CSV)' : 'Download Seatings CSV'}
               </a>
             </div>
           </div>
