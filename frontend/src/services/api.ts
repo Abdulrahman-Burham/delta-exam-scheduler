@@ -10,6 +10,8 @@ import {
   AvailabilityConstraint,
   VenueSchedule,
   SubstituteCandidate,
+  VenueRoster,
+  StudentLookupResult,
 } from '../types';
 
 const API_BASE = '/api';
@@ -342,6 +344,43 @@ export const api = {
     getCsvUrl: () => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
       return token ? `${API_BASE}/exports/csv?token=${encodeURIComponent(token)}` : `${API_BASE}/exports/csv`;
+    },
+  },
+
+  // Students & Seating Rosters
+  students: {
+    getRoster: async (params: { sessionId?: number; venueName?: string; courseName?: string; examDate?: string }) => {
+      const q = new URLSearchParams();
+      if (params.sessionId) q.append('session_id', params.sessionId.toString());
+      if (params.venueName) q.append('venue_name', params.venueName);
+      if (params.courseName) q.append('course_name', params.courseName);
+      if (params.examDate) q.append('exam_date', params.examDate);
+      const res = await secureFetch(`${API_BASE}/students/roster?${q.toString()}`);
+      return handleResponse<VenueRoster>(res);
+    },
+    updateAttendance: async (items: { seating_id: number; status: string; notes?: string }[]) => {
+      const res = await secureFetch(`${API_BASE}/students/attendance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      return handleResponse<{ success: boolean; updated_count: number }>(res);
+    },
+    lookup: async (code: string) => {
+      const res = await fetch(`${API_BASE}/students/lookup?code=${encodeURIComponent(code)}`);
+      return handleResponse<StudentLookupResult>(res);
+    },
+    getRosterPdfUrl: (params: { sessionId?: number; venueName?: string; courseName?: string; examDate?: string }) => {
+      const q = new URLSearchParams();
+      if (params.sessionId) q.append('session_id', params.sessionId.toString());
+      if (params.venueName) q.append('venue_name', params.venueName);
+      if (params.courseName) q.append('course_name', params.courseName);
+      if (params.examDate) q.append('exam_date', params.examDate);
+      return `${API_BASE}/students/export-pdf?${q.toString()}`;
+    },
+    getAnalytics: async () => {
+      const res = await secureFetch(`${API_BASE}/students/analytics`);
+      return handleResponse<any>(res);
     },
   },
 };

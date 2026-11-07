@@ -455,3 +455,178 @@ class ExportService:
 
         lines.append("END:VCALENDAR")
         return "\r\n".join(lines)
+
+    @staticmethod
+    def generate_roster_pdf(
+        venue_name: str,
+        course_name: str,
+        exam_date: str,
+        time_slot: str,
+        students: list,
+        lead_doctor: str = "أستاذ المادة",
+        tas: list = None,
+    ) -> bytes:
+        """Generates official Faculty Attendance & Sign-in Sheet PDF for a specific room."""
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=0.4 * inch,
+            rightMargin=0.4 * inch,
+            topMargin=0.4 * inch,
+            bottomMargin=0.4 * inch,
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "RosterTitle",
+            parent=styles["Heading1"],
+            fontName=SYSTEM_FONT_BOLD,
+            fontSize=13,
+            leading=16,
+            alignment=1,  # Center
+            textColor=colors.HexColor("#0f172a"),
+        )
+        sub_style = ParagraphStyle(
+            "RosterSub",
+            parent=styles["Normal"],
+            fontName=SYSTEM_FONT_NAME,
+            fontSize=9,
+            leading=12,
+            alignment=1,
+            textColor=colors.HexColor("#475569"),
+        )
+        cell_style = ParagraphStyle(
+            "RosterCell",
+            parent=styles["Normal"],
+            fontName=SYSTEM_FONT_NAME,
+            fontSize=8,
+            leading=10,
+            alignment=1,
+        )
+        cell_bold = ParagraphStyle(
+            "RosterCellBold",
+            parent=styles["Normal"],
+            fontName=SYSTEM_FONT_BOLD,
+            fontSize=8,
+            leading=10,
+            alignment=1,
+            textColor=colors.HexColor("#0f172a"),
+        )
+
+        elements = []
+
+        # Header Titles
+        h1 = clean_pdf_text("جامعة الدلتا للعلوم والتكنولوجيا — كلية الذكاء الاصطناعي")
+        h2 = clean_pdf_text("كنترول الامتحانات — كشف حضور ومناداة وتوقيع الطلاب")
+        elements.append(Paragraph(h1, title_style))
+        elements.append(Spacer(1, 2))
+        elements.append(Paragraph(h2, sub_style))
+        elements.append(Spacer(1, 8))
+
+        # Metadata Summary Card
+        tas_str = ", ".join(tas) if tas else "مراقب الدور"
+        meta_data = [
+            [
+                clean_pdf_text(f"المقرر: {course_name}"),
+                clean_pdf_text(f"المكان / اللجنة: {venue_name}"),
+            ],
+            [
+                clean_pdf_text(f"التاريخ: {exam_date}"),
+                clean_pdf_text(f"الفترة الزمنية: {time_slot}"),
+            ],
+            [
+                clean_pdf_text(f"أستاذ المادة: {lead_doctor}"),
+                clean_pdf_text(f"المراقبون: {tas_str}"),
+            ],
+            [
+                clean_pdf_text(f"إجمالي عدد الطلاب المسجلين باللجنة: {len(students)} طالب"),
+                clean_pdf_text("الفصل الدراسي: خريف 2026-2027 (Midterm)"),
+            ],
+        ]
+
+        meta_table = Table(
+            [[Paragraph(c, cell_bold) for c in row] for row in meta_data],
+            colWidths=[4.0 * inch, 3.8 * inch],
+        )
+        meta_table.setStyle(
+            TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ])
+        )
+        elements.append(meta_table)
+        elements.append(Spacer(1, 10))
+
+        # Students Table
+        table_headers = [
+            clean_pdf_text("م"),
+            clean_pdf_text("كود الطالب"),
+            clean_pdf_text("اسم الطالب"),
+            clean_pdf_text("توقيع الاستلام (حضور)"),
+            clean_pdf_text("توقيع الانصراف"),
+            clean_pdf_text("ملاحظات"),
+        ]
+        table_data = [[Paragraph(h, cell_bold) for h in table_headers]]
+
+        for idx, s in enumerate(students, start=1):
+            st_code = s.student.student_code if hasattr(s, "student") and s.student else str(getattr(s, "student_id", ""))
+            st_name = s.student.full_name if hasattr(s, "student") and s.student else "طالب"
+            row = [
+                Paragraph(str(idx), cell_style),
+                Paragraph(str(st_code), cell_style),
+                Paragraph(clean_pdf_text(str(st_name)), cell_style),
+                Paragraph("", cell_style),  # Empty for physical signature
+                Paragraph("", cell_style),  # Empty for physical signature
+                Paragraph(clean_pdf_text(s.notes or ""), cell_style),
+            ]
+            table_data.append(row)
+
+        col_widths = [0.4 * inch, 1.1 * inch, 2.7 * inch, 1.3 * inch, 1.3 * inch, 1.0 * inch]
+        student_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        student_table.setStyle(
+            TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0284c7")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#94a3b8")),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ])
+        )
+        elements.append(student_table)
+        elements.append(Spacer(1, 14))
+
+        # Bottom Signatures Block
+        sig_data = [
+            [
+                clean_pdf_text("مراقب اللجنة (المعيد):"),
+                clean_pdf_text("أستاذ المقرر (الدكتور):"),
+                clean_pdf_text("رئيس الكنترول:"),
+                clean_pdf_text("عميد الكلية:"),
+            ],
+            [
+                Paragraph("...................................", cell_style),
+                Paragraph("...................................", cell_style),
+                Paragraph("...................................", cell_style),
+                Paragraph("...................................", cell_style),
+            ],
+        ]
+        sig_table = Table(sig_data, colWidths=[1.95 * inch] * 4)
+        sig_table.setStyle(
+            TableStyle([
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ])
+        )
+        elements.append(KeepTogether(sig_table))
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()

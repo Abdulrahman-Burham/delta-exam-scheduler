@@ -18,6 +18,7 @@ from app.api import (
     schedules_router,
     exports_router,
     analytics_router,
+    students_router,
 )
 
 
@@ -63,6 +64,7 @@ app.include_router(exams_router, prefix=settings.API_V1_STR)
 app.include_router(schedules_router, prefix=settings.API_V1_STR)
 app.include_router(exports_router, prefix=settings.API_V1_STR)
 app.include_router(analytics_router, prefix=settings.API_V1_STR)
+app.include_router(students_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

@@ -19,6 +19,7 @@ import { AddVenueModal } from './AddVenueModal';
 import { AddExamModal } from './AddExamModal';
 import { StaffScheduleModal } from './StaffScheduleModal';
 import { VenueScheduleModal } from './VenueScheduleModal';
+import { StudentLookupModal } from './StudentLookupModal';
 import { useToast } from '../context/ToastContext';
 import html2canvas from 'html2canvas';
 import {
@@ -136,6 +137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isReseeding, setIsReseeding] = useState<boolean>(false);
   const [selectedStaffForSchedule, setSelectedStaffForSchedule] = useState<User | null>(null);
   const [selectedVenueForSchedule, setSelectedVenueForSchedule] = useState<Venue | null>(null);
+  const [showStudentLookup, setShowStudentLookup] = useState<boolean>(false);
 
   const toast = useToast();
 
@@ -366,6 +368,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <RefreshCw className={`w-4 h-4 text-amber-400 ${isReseeding ? 'animate-spin' : ''}`} />
               <span>{language === 'ar' ? 'تطبيق الجدول الرسمي المعتمد' : 'Apply Official Schedule'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowStudentLookup(true)}
+              className="flex items-center space-x-1.5 space-x-reverse px-4 py-2.5 rounded-2xl bg-cyan-600/15 hover:bg-cyan-600/25 text-cyan-300 text-xs font-bold border border-cyan-500/30 transition duration-200 shadow-sm"
+              title={language === 'ar' ? 'استعلام لجان ومقرات وأرقام جلوس الطلاب بالكود' : 'Student Seat & Venue Finder'}
+            >
+              <GraduationCap className="w-4 h-4 text-cyan-400" />
+              <span>{language === 'ar' ? 'استعلام مقرات وجلوس الطلاب' : 'Student Seat Finder'}</span>
             </button>
           </div>
         </div>
@@ -1910,6 +1921,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <VenueScheduleModal
           venue={selectedVenueForSchedule}
           onClose={() => setSelectedVenueForSchedule(null)}
+        />
+      )}
+
+      {/* Student Seat & Venue Finder Modal */}
+      {showStudentLookup && (
+        <StudentLookupModal
+          isOpen={showStudentLookup}
+          onClose={() => setShowStudentLookup(false)}
+          language={language}
         />
       )}
     </div>

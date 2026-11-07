@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   MessageCircle,
 } from 'lucide-react';
+import { StudentLookupModal } from './StudentLookupModal';
 
 interface TADashboardProps {
   currentUser: User;
@@ -39,6 +40,7 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
   const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'timeline' | 'table' | 'grid'>('timeline');
+  const [showStudentLookup, setShowStudentLookup] = useState<boolean>(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -272,6 +274,15 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
             >
               <Camera className="w-4 h-4 text-emerald-400" />
               <span>{isExportingImage ? t('takingSnapshot') : t('takeSnapshot')}</span>
+            </button>
+
+            <button
+              onClick={() => setShowStudentLookup(true)}
+              className="flex items-center space-x-1.5 space-x-reverse px-3.5 py-2.5 rounded-xl bg-cyan-600/15 hover:bg-cyan-600/25 text-cyan-300 border border-cyan-500/30 font-bold text-xs transition"
+              title={language === 'ar' ? 'استعلام مقرات وأرقام جلوس الطلاب بالكود' : 'Student Seat & Venue Finder'}
+            >
+              <GraduationCap className="w-4 h-4 text-cyan-400" />
+              <span>{language === 'ar' ? 'استعلام الطلاب' : 'Student Finder'}</span>
             </button>
           </div>
         </div>
@@ -724,6 +735,14 @@ export const TADashboard: React.FC<TADashboardProps> = ({ currentUser }) => {
           </div>
         </div>
       </div>
+
+      {showStudentLookup && (
+        <StudentLookupModal
+          isOpen={showStudentLookup}
+          onClose={() => setShowStudentLookup(false)}
+          language={language}
+        />
+      )}
     </div>
   );
 };

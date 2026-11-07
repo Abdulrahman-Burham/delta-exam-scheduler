@@ -18,6 +18,7 @@ import { useToast } from '../context/ToastContext';
 import { api } from '../services/api';
 import { User } from '../types';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
+import { StudentLookupModal } from './StudentLookupModal';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
@@ -32,6 +33,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showStudentLookup, setShowStudentLookup] = useState(false);
 
   const quickPersonas = [
     {
@@ -163,6 +165,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 ? 'كلية الذكاء الاصطناعي — نظام توزيع ومتابعة لجان الامتحانات والمراقبات'
                 : 'Faculty of Artificial Intelligence — Automated Proctoring & Exam Allocation System'}
             </p>
+          </div>
+
+          {/* Student Exam Venue & Seating Finder Button */}
+          <div className="mb-5 p-3 rounded-2xl bg-gradient-to-r from-cyan-950/60 via-blue-950/40 to-slate-900 border border-cyan-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                <GraduationCap className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">
+                  {language === 'ar' ? 'استعلام سريع للطلاب (بدون تسجيل دخول)' : 'Student Seat & Venue Finder'}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {language === 'ar' ? 'معرفة قاعات ومواعيد ورقم الجلوس بالكود' : 'Find exam rooms, dates & seat numbers'}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowStudentLookup(true)}
+              className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition shadow-md shadow-cyan-500/20 flex-shrink-0"
+            >
+              {language === 'ar' ? 'استعلم الآن' : 'Search Now'}
+            </button>
           </div>
 
           {error && (
@@ -313,6 +339,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               language === 'ar' ? 'تم تعبئة كلمة المرور الجديدة تلقائياً' : 'Your new password has been populated'
             );
           }}
+        />
+      )}
+
+      {showStudentLookup && (
+        <StudentLookupModal
+          isOpen={showStudentLookup}
+          onClose={() => setShowStudentLookup(false)}
+          language={language}
         />
       )}
     </div>

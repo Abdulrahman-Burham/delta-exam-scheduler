@@ -188,3 +188,64 @@ export interface SubstituteCandidate {
   today_schedule_summary: string[];
   total_shifts_count: number;
 }
+
+export interface StudentInfo {
+  id: number;
+  student_code: string;
+  full_name: string;
+  department: string;
+}
+
+export interface StudentSeatingItem {
+  id: number;
+  student_id: number;
+  student: StudentInfo;
+  exam_session_id?: number;
+  venue_id?: number;
+  course_name: string;
+  department?: string;
+  venue_name: string;
+  exam_date?: string;
+  start_time?: string;
+  end_time?: string;
+  seat_number?: number;
+  attendance_status: 'PENDING' | 'PRESENT' | 'ABSENT';
+  attended_at?: string;
+  notes?: string;
+}
+
+export interface VenueRoster {
+  venue_name: string;
+  course_name?: string;
+  exam_date?: string;
+  start_time?: string;
+  end_time?: string;
+  total_students: number;
+  present_count: number;
+  absent_count: number;
+  pending_count: number;
+  students: StudentSeatingItem[];
+}
+
+export interface StudentLookupExam {
+  seating_id: number;
+  course_name: string;
+  department?: string;
+  venue_name: string;
+  exam_date?: string;
+  start_time?: string;
+  end_time?: string;
+  seat_number?: number;
+  attendance_status: string;
+  lead_doctor?: string;
+  invigilator_tas: string[];
+}
+
+export interface StudentLookupResult {
+  student_code: string;
+  full_name: string;
+  department: string;
+  academic_year: string;
+  total_exams: number;
+  seatings: StudentLookupExam[];
+}

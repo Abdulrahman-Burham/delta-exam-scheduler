@@ -3,6 +3,7 @@ from app.models.venue import Venue, VenueTypeEnum
 from app.models.exam import ExamSession
 from app.models.constraint import AvailabilityConstraint, ConstraintTypeEnum
 from app.models.assignment import ScheduleRun, ScheduleAssignment, AssignmentRoleEnum
+from app.models.student import Student, StudentSeating, AttendanceStatusEnum
 
 __all__ = [
     "User",
@@ -15,4 +16,7 @@ __all__ = [
     "ScheduleRun",
     "ScheduleAssignment",
     "AssignmentRoleEnum",
+    "Student",
+    "StudentSeating",
+    "AttendanceStatusEnum",
 ]

@@ -6,6 +6,7 @@ from app.api.exams import router as exams_router
 from app.api.schedules import router as schedules_router
 from app.api.exports import router as exports_router
 from app.api.analytics import router as analytics_router
+from app.api.students import router as students_router
 
 __all__ = [
     "auth_router",
@@ -16,4 +17,5 @@ __all__ = [
     "schedules_router",
     "exports_router",
     "analytics_router",
+    "students_router",
 ]

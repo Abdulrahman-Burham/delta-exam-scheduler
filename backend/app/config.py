@@ -25,6 +25,8 @@ class Settings(BaseSettings):
         "https://20.46.50.255",
         "http://20.46.50.255:3000",
         "http://20.46.50.255:8050",
+        "http://delta-s.duckdns.org",
+        "https://delta-s.duckdns.org",
     ]
 
     model_config = {"case_sensitive": True}
